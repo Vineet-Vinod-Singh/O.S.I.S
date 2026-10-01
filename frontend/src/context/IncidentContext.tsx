@@ -1,9 +1,8 @@
 import { createContext, useContext, useState, useCallback, useMemo, useEffect, useRef, type ReactNode } from "react";
-import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   getIncident,
   listIncidents,
-  analyzeIncident,
   type IncidentReport,
   type IncidentSummary,
 } from "../api/incidents";
@@ -71,20 +70,6 @@ export function IncidentProvider({ children }: { children: ReactNode }) {
     retry: false,
   });
 
-  // Auto-analyze mutation (used only when no saved reports exist)
-  const autoAnalyze = useMutation({
-    mutationFn: () => analyzeIncident({ mode: "DEMO", sceneId: "demo-arabian-sea", forecastHours: 24 }),
-    onSuccess: (r) => {
-      queryClient.setQueryData(["incident", r.id], r);
-      setActiveReportState(r);
-      setAutoLoading(false);
-      void queryClient.invalidateQueries({ queryKey: ["incidents"] });
-    },
-    onError: () => {
-      setAutoLoading(false);
-    },
-  });
-
   // Auto-load: when history arrives and no report is selected, pick the best default
   useEffect(() => {
     if (autoLoadAttempted.current) return;
@@ -116,11 +101,10 @@ export function IncidentProvider({ children }: { children: ReactNode }) {
         }
       }
     } else {
-      // No saved reports — trigger automatic analysis
-      setAutoLoading(true);
-      autoAnalyze.mutate();
+      // History is empty; keep loading false and let the incident list provide reports
+      setAutoLoading(false);
     }
-  }, [historyData, historyLoading, activeReport, queryClient, autoAnalyze]);
+  }, [historyData, historyLoading, activeReport, queryClient]);
 
   // When pending report arrives, synchronize state & query client cache
   useEffect(() => {

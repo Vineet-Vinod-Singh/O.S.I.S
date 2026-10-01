@@ -11,6 +11,9 @@ const sarInput = require('./sar-input.service');
 const directory = () =>
     process.env.OSIS_REPORT_DIR ||
     path.resolve(__dirname, '../../data/incidents');
+const seedDirectory = () =>
+    process.env.OSIS_SEED_DIR ||
+    path.resolve(__dirname, '../../data/seed-incidents');
 const validId = (id) => /^[0-9a-f]{8}-[0-9a-f-]{27}$/i.test(id);
 let active = 0;
 let admissionWindow = Date.now(),
@@ -314,23 +317,37 @@ async function get(id) {
             await fs.readFile(path.join(directory(), `${id}.json`), 'utf8'),
         );
     } catch (error) {
-        if (error.code === 'ENOENT')
-            throw Object.assign(new Error('Incident not found'), {
-                status: 404,
-            });
+        if (error.code === 'ENOENT') {
+            try {
+                return JSON.parse(
+                    await fs.readFile(
+                        path.join(seedDirectory(), `${id}.json`),
+                        'utf8',
+                    ),
+                );
+            } catch (seedError) {
+                if (seedError.code === 'ENOENT')
+                    throw Object.assign(new Error('Incident not found'), {
+                        status: 404,
+                    });
+                throw seedError;
+            }
+        }
         throw error;
     }
 }
 
 async function list() {
-    let files;
+    let files = [];
     try {
         files = await fs.readdir(directory());
     } catch (error) {
-        if (error.code === 'ENOENT') return [];
-        throw error;
+        if (error.code !== 'ENOENT') throw error;
     }
     const reports = [];
+    const seenIds = new Set();
+    const seenSceneIds = new Set();
+
     for (const file of files
         .filter((f) => f.endsWith('.json') && validId(f.slice(0, -5)))
         .slice(0, limits.maxReports)) {
@@ -340,6 +357,8 @@ async function list() {
         } catch {
             continue;
         } // One corrupt archive must not blank history.
+        seenIds.add(r.id);
+        if (r.scene?.id) seenSceneIds.add(r.scene.id);
         reports.push({
             id: r.id,
             detectedAt: r.detectedAt,
@@ -348,11 +367,52 @@ async function list() {
             status: r.status,
             outcome: r.outcome,
             forecastHours: r.forecastHours,
-            leadingCandidate: r.leadingCandidate,
+            leadingCandidate: r.leadingCandidate || null,
             source: r.scene.source,
             mode: r.mode || 'DEMO',
         });
     }
+
+    // Baseline fallback: if any core scenario is missing from runtime reports,
+    // supplement from seed fixtures without permanently writing to runtime storage.
+    let seedFiles = [];
+    try {
+        seedFiles = await fs.readdir(seedDirectory());
+    } catch (error) {
+        if (error.code !== 'ENOENT') throw error;
+    }
+
+    for (const file of seedFiles.filter(
+        (f) => f.endsWith('.json') && validId(f.slice(0, -5)),
+    )) {
+        const id = file.slice(0, -5);
+        if (seenIds.has(id)) continue;
+        let r;
+        try {
+            r = JSON.parse(
+                await fs.readFile(path.join(seedDirectory(), file), 'utf8'),
+            );
+        } catch {
+            continue;
+        }
+        if (r.scene?.id && seenSceneIds.has(r.scene.id)) continue;
+
+        seenIds.add(r.id);
+        if (r.scene?.id) seenSceneIds.add(r.scene.id);
+        reports.push({
+            id: r.id,
+            detectedAt: r.detectedAt,
+            sceneId: r.scene.id,
+            acquiredAt: r.scene.acquiredAt,
+            status: r.status,
+            outcome: r.outcome,
+            forecastHours: r.forecastHours,
+            leadingCandidate: r.leadingCandidate || null,
+            source: r.scene.source,
+            mode: r.mode || 'DEMO',
+        });
+    }
+
     return reports.sort((a, b) => b.detectedAt.localeCompare(a.detectedAt));
 }
 

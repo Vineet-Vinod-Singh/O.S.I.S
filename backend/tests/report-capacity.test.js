@@ -11,6 +11,7 @@ test('report capacity fails gracefully without deleting evidence; corrupt histor
     );
     process.env.OSIS_MAX_REPORTS = '1';
     process.env.OSIS_REPORT_DIR = directory;
+    process.env.OSIS_SEED_DIR = path.join(directory, 'empty-seeds');
     process.env.OSIS_PERSIST_POSTGRES = 'false';
     const service = require('../src/services/incident.service');
     try {

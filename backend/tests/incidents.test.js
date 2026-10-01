@@ -8,6 +8,7 @@ const path = require('node:path');
 test('HTTP end-to-end analysis, durable reports, validation and graceful failures', async () => {
     const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'osis-test-'));
     process.env.OSIS_REPORT_DIR = directory;
+    process.env.OSIS_SEED_DIR = path.join(directory, 'empty-seeds');
     process.env.OSIS_PERSIST_POSTGRES = 'false';
     const app = require('../src/app');
     const pool = require('../src/config/db');
