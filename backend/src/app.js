@@ -9,6 +9,12 @@ const detectionRoutes = require('./routes/detection.routes');
 const driftRoutes = require('./routes/drift.routes');
 const vesselsRoutes = require('./routes/vessels.routes');
 const reportsRoutes = require('./routes/reports.routes');
+// DAY 1 — autonomous ingestion
+const ingestionRoutes = require('./routes/ingestion.routes');
+const scenePoller = require('./services/scene-poller.service');
+// DAY 2 — autonomous acquisition worker
+const workerRoutes = require('./routes/worker.routes');
+const sceneWorker = require('./services/scene-worker.service');
 
 const app = express();
 
@@ -24,6 +30,24 @@ app.use('/api/detection', detectionRoutes);
 app.use('/api/drift', driftRoutes);
 app.use('/api/vessels', vesselsRoutes);
 app.use('/api/reports', reportsRoutes);
+// DAY 1 — scene ingestion & deduplication queue
+app.use('/api/ingestion', ingestionRoutes);
+// DAY 2 — scene acquisition worker
+app.use('/api/worker', workerRoutes);
+
+// Auto-start the scene poller on boot when POLLER_AUTOSTART=true
+if (process.env.POLLER_AUTOSTART === 'true') {
+  scenePoller.start().catch(err =>
+    console.error('[app] Scene poller auto-start failed:', err.message)
+  );
+}
+
+// Auto-start the acquisition worker on boot only when OSIS_WORKER_AUTOSTART=true
+if (process.env.OSIS_WORKER_AUTOSTART === 'true') {
+  sceneWorker.startWorker().catch(err =>
+    console.error('[app] Scene worker auto-start failed:', err.message)
+  );
+}
 
 // Basic error handling middleware
 app.use((err, req, res, next) => {
