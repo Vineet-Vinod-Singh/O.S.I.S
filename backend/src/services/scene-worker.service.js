@@ -28,6 +28,7 @@ const os   = require('node:os');
 const { randomUUID } = require('node:crypto');
 const pool     = require('../config/db');
 const sentinel = require('./sentinel.service');
+const incidentService = require('./incident.service');
 
 // ---------------------------------------------------------------------------
 // Configuration
@@ -319,6 +320,45 @@ async function processNextScene() {
 
     const artifact = await acquireScene(scene);
     await markCompleted(scene.id, artifact);
+
+    try {
+      const trusted = {
+        _scene: {
+          id: scene.scene_id,
+          mode: 'REAL',
+          source: 'cdse_sentinel1',
+          acquiredAt: artifact.acquiredAt,
+          bbox: artifact.bbox,
+          polarization: artifact.polarizations,
+          rasterUnits: 'linear'
+        },
+        _paths: artifact.paths
+      };
+
+      const report = await incidentService.analyze(
+        {
+          mode: 'REAL',
+          sceneId: 's1a-20240619-karnataka',
+          detector: 'hybrid',
+          forecastHours: 24,
+          hindcastHours: 6
+        },
+        trusted
+      );
+
+      if (report && report.id) {
+        await pool.query(
+          `UPDATE processed_scenes SET incident_id = $1 WHERE id = $2`,
+          [report.id, scene.id]
+        );
+        console.log(`[worker] Detection completed for scene ${scene.scene_id} -> incident ${report.id}`);
+      }
+    } catch (detectionErr) {
+      const safeMsg = String(detectionErr.message || 'Unknown detection error').slice(0, 1000);
+      console.error(`[worker] Detection failed for scene ${scene.scene_id}:`, safeMsg);
+      // Acquisition succeeded, so scene remains 'completed' and is not retried.
+      // The incident_id remains NULL so it can be retried manually if needed.
+    }
 
     _processedCount++;
     _lastError = null;

@@ -147,7 +147,10 @@ def _analyze(payload):
                     for point in points:
                         environment.get_environment(point["lat"], point["lon"], timestamp(point["timestamp"]))
                     report["backward" if backward else "forward"] = points
-                    stage(name, "completed", "MODELED", "Scenario RK4; all sample positions/times covered by both fields")
+                    if points and abs(points[-1]["hours"]) < duration:
+                        stage(name, "partial", "MODELED", "Trajectory truncated: reached land or data boundary")
+                    else:
+                        stage(name, "completed", "MODELED", "Scenario RK4; all sample positions/times covered by both fields")
                     report["stages"].append(name)
                     report["provenance"]["origin" if backward else "forecast"] = "MODELED RK4, conditional on scenario and reanalysis"
                 except Unavailable as exc:

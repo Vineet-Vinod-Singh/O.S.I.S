@@ -82,6 +82,24 @@ class IncidentPipelineTests(unittest.TestCase):
         self.assertLess(p.haversine_km(recovered["lat"], recovered["lon"],
                                       r["backward"][0]["lat"], r["backward"][0]["lon"]), .001)
 
+    def test_drift_terminates_safely_on_land_boundary(self):
+        r = self.report
+        centroid = r["spill"]["metrics"]["centroid"]
+        env = p.FixtureEnvironmentProvider(self.scenario["environment"])
+        
+        with patch("incident_pipeline.rk4_step_backward", side_effect=ValueError("Environmental sample contains missing or nonfinite values")):
+            forward = p.drift(centroid, r["scene"]["acquiredAt"], 24, env)
+        self.assertEqual(len(forward), 1)
+        self.assertEqual(forward[0]["hours"], 0)
+        
+        with patch("incident_pipeline.rk4_step_backward", side_effect=ValueError("Environmental sample is outside spatial or temporal coverage")):
+            forward = p.drift(centroid, r["scene"]["acquiredAt"], 24, env)
+        self.assertEqual(len(forward), 1)
+        
+        with patch("incident_pipeline.rk4_step_backward", side_effect=ValueError("Something completely different")):
+            with self.assertRaises(ValueError):
+                p.drift(centroid, r["scene"]["acquiredAt"], 24, env)
+
     def test_ais_normalization_csv_and_rejections(self):
         rows, _ = p.demo_ais(self.scenario)
         bad = dict(rows[0], latitude=91)

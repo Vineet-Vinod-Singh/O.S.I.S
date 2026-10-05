@@ -67,7 +67,7 @@ class RealPipelineTests(unittest.TestCase):
         with patch.object(p, "run_sar", return_value=self.sar), patch.object(p, "StrictEnvironmentProvider", return_value=Environment()), patch.object(p, "drift", side_effect=[Unavailable("Outside coverage"), [point]]), patch.object(p, "historical_ais") as ais:
             r = p.analyze(self.payload)
         ais.assert_not_called()
-        self.assertEqual(r["stageStatus"]["forecast"]["status"], "completed")
+        self.assertEqual(r["stageStatus"]["forecast"]["status"], "partial")
         self.assertEqual(r["stageStatus"]["hindcast"]["status"], "unavailable")
         self.assertEqual(r["forward"], [point])
         self.assertEqual(r["backward"], [])
