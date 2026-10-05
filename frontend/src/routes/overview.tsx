@@ -147,15 +147,15 @@ function OverviewDashboard() {
       status: origin
         ? ("completed" as const)
         : hasDrift
-          ? ("completed" as const)
+          ? (report.stageStatus?.["forecast"]?.status === "partial" ? ("partial" as const) : ("completed" as const))
           : isNoSpill
             ? ("not_assessed" as const)
             : ("unavailable" as const),
-      statusBadge: origin ? "Completed" : hasDrift ? "Completed" : isNoSpill ? "Not Assessed" : "Unavailable",
+      statusBadge: origin ? "Completed" : hasDrift ? (report.stageStatus?.["forecast"]?.status === "partial" ? "Partial" : "Completed") : isNoSpill ? "Not Assessed" : "Unavailable",
       result: origin
         ? `Origin region computed at ${origin.lat.toFixed(3)}°N, ${origin.lon.toFixed(3)}°E (±${origin.uncertaintyKm} km)`
         : hasDrift
-          ? `Drift trajectory computed (${driftPath.length} steps)`
+          ? (report.stageStatus?.["forecast"]?.status === "partial" ? (report.stageStatus?.["forecast"]?.reason || "Trajectory truncated: reached land or data boundary") : `Drift trajectory computed (${driftPath.length} steps)`)
           : isNoSpill
             ? "Drift analysis skipped — clean sea surface"
             : "Hydrodynamic advection data unavailable",
@@ -452,23 +452,26 @@ function OverviewDashboard() {
           {pipelineSteps.map((step, i) => {
             const Icon = step.icon;
             const isCompleted = step.status === "completed";
+            const isPartial = step.status === "partial";
             const isUnavailable = step.status === "unavailable";
             const isInconclusive = step.status === "inconclusive";
             const isIncomplete = step.status === "incomplete";
 
             const statusColor = isCompleted
               ? "text-emerald-400 border-emerald-500/30 bg-emerald-500/10"
-              : isUnavailable
-                ? "text-amber-400 border-amber-500/30 bg-amber-500/10"
-                : isInconclusive
+              : isPartial
+                ? "text-amber-400 border-amber-500/40 bg-amber-500/10"
+                : isUnavailable
                   ? "text-amber-400 border-amber-500/30 bg-amber-500/10"
-                  : isIncomplete
-                    ? "text-muted-foreground border-border bg-secondary/50"
-                    : "text-muted-foreground border-border bg-secondary/40";
+                  : isInconclusive
+                    ? "text-amber-400 border-amber-500/30 bg-amber-500/10"
+                    : isIncomplete
+                      ? "text-muted-foreground border-border bg-secondary/50"
+                      : "text-muted-foreground border-border bg-secondary/40";
 
             const statusIcon = isCompleted ? (
               <CheckCircle2 className="h-4 w-4 text-emerald-400 shrink-0" />
-            ) : isUnavailable || isInconclusive ? (
+            ) : isPartial || isUnavailable || isInconclusive ? (
               <AlertTriangle className="h-4 w-4 text-amber-400 shrink-0" />
             ) : (
               <HelpCircle className="h-4 w-4 text-muted-foreground shrink-0" />

@@ -18,6 +18,7 @@ import {
   Layers,
   ChevronDown,
   Loader2,
+  Activity,
 } from "lucide-react";
 
 import appCss from "../styles.css?url";
@@ -28,6 +29,7 @@ import { getIncidentLabel } from "../api/incidents";
 
 const NAV: { to: string; label: string; icon: typeof LayoutDashboard; exact?: boolean }[] = [
   { to: "/overview", label: "Overview", icon: LayoutDashboard, exact: true },
+  { to: "/operations", label: "Operations", icon: Activity },
   { to: "/satellite", label: "Detection", icon: Radar },
   { to: "/backtracking", label: "Drift", icon: Compass },
   { to: "/ais", label: "Vessel Attribution", icon: Ship },

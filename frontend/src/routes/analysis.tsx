@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
@@ -39,7 +39,12 @@ import {
   Info,
 } from "lucide-react";
 
-export const Route = createFileRoute("/analysis")({ component: InvestigationPage });
+export const Route = createFileRoute("/analysis")({
+  validateSearch: (search: Record<string, unknown>): { id?: string } => {
+    return { id: search.id as string | undefined };
+  },
+  component: InvestigationPage,
+});
 const colors = ["var(--accent-blue)", "#94a3b8", "#f59e0b"];
 const utc = (time: string) => time.replace("T", " ").replace("Z", " UTC");
 
@@ -114,7 +119,9 @@ function InvestigationReport({ report }: { report: IncidentReport }) {
       ? "NO SPILL DETECTED"
       : outcome === "ANALYSIS_INCONCLUSIVE"
         ? "ANALYSIS INCONCLUSIVE"
-        : "INVESTIGATION COMPLETE";
+        : outcome === "SPILL_DETECTED"
+          ? "SPILL DETECTED (INVESTIGATION PARTIAL)"
+          : "INVESTIGATION COMPLETE";
 
   const assessmentColor = outcome === "SPILL_DETECTED"
     ? "border-rose-500/40 bg-rose-500/5"
@@ -684,8 +691,11 @@ function InvestigationReport({ report }: { report: IncidentReport }) {
 }
 
 function InvestigationPage() {
+  const { id } = Route.useSearch();
+  const navigate = useNavigate();
   const client = useQueryClient();
   const {
+    setActiveReportId,
     setActiveReport,
     clearActiveReport,
     activeReport,
@@ -693,6 +703,32 @@ function InvestigationPage() {
     history,
     historyLoading,
   } = useIncident();
+
+  const [prevId, setPrevId] = useState(id);
+  const hasMounted = useRef(false);
+
+  useEffect(() => {
+    if (!hasMounted.current) {
+      hasMounted.current = true;
+      if (id && id !== activeReportId) {
+        setActiveReportId(id);
+      }
+      return;
+    }
+
+    if (id !== prevId) {
+      // URL changed!
+      setPrevId(id);
+      if (id && id !== activeReportId) {
+        setActiveReportId(id);
+      }
+    } else if (activeReportId !== id) {
+      // Global context changed (e.g. from dropdown)! Update URL.
+      if (activeReportId) {
+        navigate({ to: "/analysis", search: { id: activeReportId }, replace: true });
+      }
+    }
+  }, [id, prevId, activeReportId, setActiveReportId, navigate]);
   const [showControls, setShowControls] = useState(false);
   const [horizon, setHorizon] = useState(24);
   const [sceneId, setSceneId] = useState("demo-arabian-sea");
@@ -734,6 +770,7 @@ function InvestigationPage() {
       client.setQueryData(["incident", r.id], r);
       setActiveReport(r);
       void client.invalidateQueries({ queryKey: ["incidents"] });
+      navigate({ to: "/analysis", search: { id: r.id } });
     },
   });
 
@@ -852,6 +889,7 @@ function InvestigationPage() {
                 client.setQueryData(["incident", r.id], r);
                 setActiveReport(r);
                 void client.invalidateQueries({ queryKey: ["incidents"] });
+                navigate({ to: "/analysis", search: { id: r.id } });
               }}
             />
           )}
@@ -871,6 +909,7 @@ function InvestigationPage() {
                   if (!newId) {
                     clearActiveReport();
                     setPendingSavedId("");
+                    navigate({ to: "/analysis", search: {} });
                   } else {
                     const cached = client.getQueryData<typeof activeReport>(["incident", newId]);
                     if (cached) {
@@ -878,6 +917,7 @@ function InvestigationPage() {
                     } else {
                       setPendingSavedId(newId);
                     }
+                    navigate({ to: "/analysis", search: { id: newId } });
                   }
                 }}
               >

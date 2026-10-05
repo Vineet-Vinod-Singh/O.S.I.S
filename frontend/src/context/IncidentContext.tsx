@@ -74,7 +74,7 @@ export function IncidentProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (autoLoadAttempted.current) return;
     if (historyLoading || !historyData) return;
-    if (activeReport) return; // already have something
+    if (activeReport || pendingId) return; // already have something or currently loading something
 
     autoLoadAttempted.current = true;
 
@@ -104,7 +104,7 @@ export function IncidentProvider({ children }: { children: ReactNode }) {
       // History is empty; keep loading false and let the incident list provide reports
       setAutoLoading(false);
     }
-  }, [historyData, historyLoading, activeReport, queryClient]);
+  }, [historyData, historyLoading, activeReport, pendingId, queryClient]);
 
   // When pending report arrives, synchronize state & query client cache
   useEffect(() => {

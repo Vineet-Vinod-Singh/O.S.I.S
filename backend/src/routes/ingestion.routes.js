@@ -1,4 +1,4 @@
-﻿'use strict';
+'use strict';
 /**
  * ingestion.routes.js
  * ====================
@@ -163,4 +163,64 @@ router.get('/queue/:sceneId', async (req, res, next) => {
   }
 });
 
+// ---------------------------------------------------------------------------
+// POST /api/ingestion/replay
+// Re-queue an existing processed_scenes row for replay through the normal
+// worker → cached VV/VH → incidentService.analyze() → osis_incidents pipeline.
+//
+// Body (JSON):  { "sceneId": "..." }
+// Default:      test_s1a_karnataka_day3_ml_001
+//
+// Returns 200 with the reset row, or 404 if scene_id is not in the table.
+// Does NOT insert a new row — the row must already exist.
+// ---------------------------------------------------------------------------
+router.post('/replay', async (req, res, next) => {
+  try {
+    const DEFAULT_SCENE = 'test_s1a_karnataka_day3_ml_001';
+    const raw = req.body && typeof req.body.sceneId === 'string'
+      ? req.body.sceneId.trim()
+      : '';
+    const sceneId = raw || DEFAULT_SCENE;
+
+    // Sanitise: must be a non-empty string with no shell-injection characters
+    if (!/^[A-Za-z0-9._-]+$/.test(sceneId)) {
+      return res.status(400).json({ ok: false, error: 'Invalid sceneId format' });
+    }
+
+    const { rows } = await pool.query(
+      `UPDATE processed_scenes
+          SET status        = 'queued',
+              incident_id   = NULL,
+              completed_at  = NULL,
+              processing_at = NULL,
+              error_message = NULL,
+              retry_count   = 0,
+              queued_at     = NOW()
+        WHERE scene_id = $1
+        RETURNING id, scene_id, collection, bbox, acquired_at, platform,
+                  orbit_direction, polarization, status,
+                  queued_at, processing_at, completed_at,
+                  error_message, retry_count, incident_id`,
+      [sceneId]
+    );
+
+    if (rows.length === 0) {
+      return res.status(404).json({
+        ok: false,
+        error: `Scene '${sceneId}' not found in processed_scenes. Only scenes that have already been ingested at least once can be replayed.`,
+      });
+    }
+
+    console.log(`[ingestion] Replay requested for scene ${sceneId} — reset to queued`);
+    res.json({
+      ok: true,
+      message: `Scene '${sceneId}' re-queued for replay. The worker will process it through the normal pipeline.`,
+      scene: rows[0],
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
 module.exports = router;
+
