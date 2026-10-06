@@ -66,3 +66,14 @@ export const getIngestionStatus = () =>
 
 export const getWorkerStatus = () =>
   apiClient<WorkerStatusResponse>("/api/worker/status");
+
+export const replayScene = (sceneId: string) =>
+  apiClient("/api/ingestion/replay", {
+    method: "POST",
+    body: JSON.stringify({ sceneId }),
+  });
+
+export const recoverStale = () =>
+  apiClient("/api/worker/recover-stale", {
+    method: "POST",
+  });

@@ -22,11 +22,11 @@
  *   - Modify any Day 1 poller behaviour.
  */
 
-const fs   = require('node:fs/promises');
+const fs = require('node:fs/promises');
 const path = require('node:path');
-const os   = require('node:os');
+const os = require('node:os');
 const { randomUUID } = require('node:crypto');
-const pool     = require('../config/db');
+const pool = require('../config/db');
 const sentinel = require('./sentinel.service');
 const incidentService = require('./incident.service');
 
@@ -67,36 +67,60 @@ const WORKER_ID = `worker-${process.pid}-${randomUUID().slice(0, 8)}`;
 // Module state
 // ---------------------------------------------------------------------------
 
-let _timer    = null;
-let _running  = false;
+let _timer = null;
+let _running = false;
 let _inFlight = false;   // prevents concurrent processNextScene calls
 let _processedCount = 0;
-let _failedCount    = 0;
-let _lastActivity   = null;
-let _lastError      = null;
+let _failedCount = 0;
+let _lastActivity = null;
+let _lastError = null;
 
 // ---------------------------------------------------------------------------
 // Database helpers
 // ---------------------------------------------------------------------------
 
 /**
- * Reset scenes stuck in 'processing' back to 'queued'.
- * Called once on worker start to recover from crash/restart.
- * @returns {Promise<number>} number of scenes recovered
+ * Reset scenes stuck in 'processing' back to 'queued', or mark them 'failed'
+ * if retry_count reaches 3 (or higher).
+ * During stale recovery, retry_count is incremented.
+ *
+ * @returns {Promise<{recovered: number, failed: number}>} counts of re-queued and failed scenes
  */
 async function recoverStaleScenes() {
   const cutoff = new Date(Date.now() - STALE_MS);
-  const { rowCount } = await pool.query(
+
+  // 1. Stale scenes whose incremented retry_count reaches or exceeds 3 -> mark 'failed'
+  const failedResult = await pool.query(
+    `UPDATE processed_scenes
+        SET status        = 'failed',
+            processing_at = NULL,
+            worker_id     = NULL,
+            retry_count   = COALESCE(retry_count, 0) + 1,
+            error_message = CONCAT(COALESCE(error_message, ''), ' [stale recovery: retry limit reached]')
+      WHERE status = 'processing'
+        AND processing_at < $1
+        AND COALESCE(retry_count, 0) >= 2`,
+    [cutoff]
+  );
+
+  // 2. Stale scenes whose incremented retry_count is < 3 -> re-queue
+  const recoveredResult = await pool.query(
     `UPDATE processed_scenes
         SET status        = 'queued',
             processing_at = NULL,
             worker_id     = NULL,
-            error_message = CONCAT(COALESCE(error_message, ''), ' [reset: stale processing at boot]')
+            retry_count   = COALESCE(retry_count, 0) + 1,
+            error_message = CONCAT(COALESCE(error_message, ''), ' [reset: stale processing recovered]')
       WHERE status = 'processing'
-        AND processing_at < $1`,
+        AND processing_at < $1
+        AND COALESCE(retry_count, 0) < 2`,
     [cutoff]
   );
-  return rowCount;
+
+  return {
+    recovered: recoveredResult.rowCount,
+    failed: failedResult.rowCount,
+  };
 }
 
 /**
@@ -201,7 +225,7 @@ async function ensureSceneDir(sceneId) {
   // Guard: final resolved path must still be inside SCENES_DIR
   const resolved = path.resolve(sceneDir);
   if (!resolved.startsWith(path.resolve(SCENES_DIR) + path.sep) &&
-      resolved !== path.resolve(SCENES_DIR)) {
+    resolved !== path.resolve(SCENES_DIR)) {
     throw new Error(`Path traversal detected for scene_id: ${sceneId}`);
   }
 
@@ -244,7 +268,7 @@ async function acquireScene(scene) {
     throw new Error(`Scene ${scene_id}: no acquired_at timestamp — cannot derive download window`);
   }
   const fromTime = new Date(acquired_at).toISOString();
-  const toTime   = new Date(new Date(acquired_at).getTime() + 30000).toISOString(); // 30-second window (same as onDemand)
+  const toTime = new Date(new Date(acquired_at).getTime() + 30000).toISOString(); // 30-second window (same as onDemand)
 
   // --- Ensure output directory ---
   const sceneDir = await ensureSceneDir(scene_id);
@@ -261,7 +285,7 @@ async function acquireScene(scene) {
     try {
       await fs.access(destPath);
       alreadyExists = true;
-    } catch (_) {}
+    } catch (_) { }
 
     let buffer;
     if (alreadyExists) {
@@ -272,7 +296,7 @@ async function acquireScene(scene) {
       const result = await sentinel.getSentinel1GrdImage({
         bbox,
         from: fromTime,
-        to:   toTime,
+        to: toTime,
         width: 512,
         height: 512,
         polarization: pol,
@@ -291,9 +315,9 @@ async function acquireScene(scene) {
     paths,
     tiffMeta,
     bbox,
-    acquiredAt:  fromTime,
+    acquiredAt: fromTime,
     downloadedAt: new Date().toISOString(),
-    workerId:    WORKER_ID,
+    workerId: WORKER_ID,
     polarizations: ['VV', 'VH'],
   };
 }
@@ -358,6 +382,17 @@ async function processNextScene() {
       console.error(`[worker] Detection failed for scene ${scene.scene_id}:`, safeMsg);
       // Acquisition succeeded, so scene remains 'completed' and is not retried.
       // The incident_id remains NULL so it can be retried manually if needed.
+      // Persist the detection error with [detection_failed] prefix.
+      try {
+        await pool.query(
+          `UPDATE processed_scenes
+              SET error_message = $1
+            WHERE id = $2`,
+          [`[detection_failed] ${safeMsg}`, scene.id]
+        );
+      } catch (dbErr) {
+        console.error('[worker] Could not persist detection error to DB:', String(dbErr.message).slice(0, 200));
+      }
     }
 
     _processedCount++;
@@ -400,8 +435,10 @@ async function startWorker() {
 
   // Recovery: reset stale processing scenes before first poll
   try {
-    const recovered = await recoverStaleScenes();
-    if (recovered > 0) console.log(`[worker] Recovered ${recovered} stale scene(s) → queued`);
+    const { recovered, failed } = await recoverStaleScenes();
+    if (recovered > 0 || failed > 0) {
+      console.log(`[worker] Boot stale recovery: ${recovered} re-queued, ${failed} failed`);
+    }
   } catch (err) {
     console.warn('[worker] Stale recovery failed (non-fatal):', String(err.message).slice(0, 200));
   }
@@ -427,20 +464,32 @@ function stopWorker() {
 
 /**
  * Internal tick — runs processNextScene if not already in flight.
+ * Runs stale recovery periodically while the worker is alive.
  * Prevents overlapping concurrent invocations from the interval.
  */
-function _tick() {
+async function _tick() {
   if (_inFlight) {
     console.log('[worker] Previous cycle still running — skipping tick');
     return;
   }
   _inFlight = true;
-  processNextScene()
-    .catch(err => {
-      _lastError = String(err.message || 'tick error');
-      console.error('[worker] Unhandled tick error:', _lastError);
-    })
-    .finally(() => { _inFlight = false; });
+  try {
+    try {
+      const { recovered, failed } = await recoverStaleScenes();
+      if (recovered > 0 || failed > 0) {
+        console.log(`[worker] Periodic stale recovery: ${recovered} re-queued, ${failed} failed`);
+      }
+    } catch (recErr) {
+      console.warn('[worker] Periodic stale recovery failed (non-fatal):', String(recErr.message).slice(0, 200));
+    }
+
+    await processNextScene();
+  } catch (err) {
+    _lastError = String(err.message || 'tick error');
+    console.error('[worker] Unhandled tick error:', _lastError);
+  } finally {
+    _inFlight = false;
+  }
 }
 
 /**
@@ -448,17 +497,17 @@ function _tick() {
  */
 function workerStatus() {
   return {
-    running:        _running,
-    inFlight:       _inFlight,
-    workerId:       WORKER_ID,
+    running: _running,
+    inFlight: _inFlight,
+    workerId: WORKER_ID,
     processedCount: _processedCount,
-    failedCount:    _failedCount,
-    lastActivity:   _lastActivity,
-    lastError:      _lastError,
+    failedCount: _failedCount,
+    lastActivity: _lastActivity,
+    lastError: _lastError,
     config: {
       intervalMs: WORKER_INTERVAL_MS,
-      staleMs:    STALE_MS,
-      scenesDir:  SCENES_DIR,
+      staleMs: STALE_MS,
+      scenesDir: SCENES_DIR,
     },
   };
 }

@@ -54,4 +54,21 @@ router.post('/process-next', async (req, res, next) => {
   }
 });
 
+// ---------------------------------------------------------------------------
+// POST /recover-stale
+// ---------------------------------------------------------------------------
+router.post('/recover-stale', async (req, res, next) => {
+  try {
+    const result = await worker.recoverStaleScenes();
+    res.json({
+      ok: true,
+      message: 'Stale recovery executed',
+      recovered: result?.recovered ?? 0,
+      failed: result?.failed ?? 0,
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
 module.exports = router;
