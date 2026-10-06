@@ -1,24 +1,57 @@
 'use strict';
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
+const https = require('https');
+const { PassThrough } = require('stream');
 const boundedFetch = require('../src/services/bounded-fetch');
 const sentinel = require('../src/services/sentinel.service');
 
+function createMockRequest(responseData, statusCode = 200, headers = {}, triggerError = null) {
+    return (options, cb) => {
+        const req = new PassThrough();
+        req.destroy = () => {};
+        
+        if (triggerError) {
+            setTimeout(() => req.emit('error', triggerError), 1);
+            return req;
+        }
+
+        const res = new PassThrough();
+        res.statusCode = statusCode;
+        res.headers = headers;
+        if (typeof responseData === 'string') {
+            res.headers['content-length'] = Buffer.byteLength(responseData).toString();
+        }
+        
+        setTimeout(() => {
+            if (cb) cb(res);
+            if (responseData instanceof Error) {
+                res.emit('error', responseData);
+            } else if (responseData) {
+                res.write(responseData);
+                res.end();
+            }
+        }, 1);
+
+        return req;
+    };
+}
+
 test('bounded streaming body, provider errors and AOI/scene guards', async () => {
-    const original = global.fetch;
+    const originalRequest = https.request;
     let calls = 0;
     try {
-        global.fetch = async () => {
+        https.request = (opts, cb) => {
             calls++;
-            return new Response('123456789');
+            return createMockRequest('123456789')(opts, cb);
         };
         await assert.rejects(
             boundedFetch('https://example.invalid', {}, 8),
             /size limit/,
         );
-        global.fetch = async () => {
+        https.request = (opts, cb) => {
             calls++;
-            return new Response('secret upstream details', { status: 401 });
+            return createMockRequest('secret upstream details', 401)(opts, cb);
         };
         await assert.rejects(
             boundedFetch('https://example.invalid'),
@@ -55,44 +88,57 @@ test('bounded streaming body, provider errors and AOI/scene guards', async () =>
             'invalid limits must reject before any request',
         );
     } finally {
-        global.fetch = original;
+        https.request = originalRequest;
     }
 });
 
 test('download concurrency is bounded and aborted/error reads release capacity', async () => {
-    const original = global.fetch;
+    const originalRequest = https.request;
     const releases = [];
     try {
-        global.fetch = async () =>
-            new Response(
-                new ReadableStream({
-                    start(controller) {
-                        releases.push(() => controller.close());
-                    },
-                }),
-            );
+        https.request = (opts, cb) => {
+            const req = new PassThrough();
+            req.destroy = () => {};
+            const res = new PassThrough();
+            res.statusCode = 200;
+            res.headers = { 'content-length': '10' };
+            setTimeout(() => {
+                cb(res);
+                releases.push(() => { res.write('1'); res.end(); });
+            }, 1);
+            return req;
+        };
+
         const first = boundedFetch('https://example.invalid');
         const second = boundedFetch('https://example.invalid');
-        await new Promise((resolve) => setImmediate(resolve));
+        await new Promise((resolve) => setTimeout(resolve, 50));
         await assert.rejects(
             boundedFetch('https://example.invalid'),
             /capacity/,
         );
         releases.forEach((release) => release());
         await Promise.all([first, second]);
-        global.fetch = async () => {
-            throw new DOMException('test timeout', 'AbortError');
+
+        https.request = (opts, cb) => createMockRequest(null, 200, {}, new Error('socket hang up'))(opts, cb);
+        // Wait, the test expects a timeout/abort error to map to 'timed out'.
+        // boundedFetch maps TimeoutError or AbortError explicitly:
+        // Since we emit 'error', it rejects with the error directly. Let's make it emit an error with name 'TimeoutError'.
+        https.request = (opts, cb) => {
+            const err = new Error('test timeout');
+            err.name = 'TimeoutError';
+            return createMockRequest(null, 200, {}, err)(opts, cb);
         };
         await assert.rejects(
             boundedFetch('https://example.invalid'),
             /timed out/,
         );
-        global.fetch = async () => new Response('ok');
+
+        https.request = (opts, cb) => createMockRequest('ok')(opts, cb);
         assert.equal(
             (await boundedFetch('https://example.invalid')).status,
             200,
         );
     } finally {
-        global.fetch = original;
+        https.request = originalRequest;
     }
 });

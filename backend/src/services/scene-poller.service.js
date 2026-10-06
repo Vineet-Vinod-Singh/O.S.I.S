@@ -248,7 +248,7 @@ async function pollOnce() {
   // Persist checkpoint
   await saveState({
     lastPollAt: now,
-    lastSceneAt: latestAcquiredAt || now,
+    lastSceneAt: latestAcquiredAt || toTime,
     pollCount: (state?.poll_count || 0) + 1,
     scenesQueued: (state?.scenes_queued || 0) + newScenes,
   });

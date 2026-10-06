@@ -1,53 +1,134 @@
 'use strict';
+const https = require('https');
+const dns = require('dns');
 const limits = require('./resource-limits');
+
 let active = 0;
-// The timeout remains active through body consumption, not merely response headers.
-async function boundedFetch(
-    url,
-    options = {},
-    maxBytes = limits.downloadBytes,
-) {
-    if (active >= 2)
-        throw new Error('CDSE request capacity reached; retry shortly');
-    active++;
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), limits.requestMs);
-    try {
-        const response = await fetch(url, {
-            ...options,
-            signal: controller.signal,
-            redirect: 'error',
-        });
-        if (!response.ok)
-            throw new Error(
-                `CDSE access unavailable (HTTP ${response.status}); check account permissions/quota`,
-            );
-        if (Number(response.headers.get('content-length')) > maxBytes)
-            throw new Error('CDSE response exceeds size limit');
-        let bytes = 0;
-        const chunks = [];
-        for await (const chunk of response.body) {
-            bytes += chunk.length;
-            if (bytes > maxBytes)
-                throw new Error('CDSE response exceeds size limit');
-            chunks.push(chunk);
+
+function boundedFetch(urlStr, options = {}, maxBytes = limits.downloadBytes) {
+    return new Promise((resolve, reject) => {
+        if (active >= 2) {
+            return reject(new Error('CDSE request capacity reached; retry shortly'));
         }
-        const buffer = Buffer.concat(chunks);
-        return {
-            ok: true,
-            status: response.status,
-            headers: response.headers,
-            json: async () => JSON.parse(buffer.toString('utf8')),
-            arrayBuffer: async () => buffer,
+        active++;
+
+        let isDone = false;
+        let timer;
+        const cleanup = () => {
+            isDone = true;
+            clearTimeout(timer);
+            active--;
         };
-    } catch (error) {
-        controller.abort();
-        if (error.name === 'AbortError' || error.name === 'TimeoutError')
-            throw new Error('CDSE request timed out; retry manually');
-        throw error;
-    } finally {
-        clearTimeout(timer);
-        active--;
-    }
+
+        const url = new URL(urlStr);
+        const headers = options.headers || {};
+        if (options.body && typeof options.body === 'string' && !headers['Content-Length'] && !headers['content-length']) {
+            headers['Content-Length'] = Buffer.byteLength(options.body).toString();
+        }
+
+        const reqOptions = {
+            hostname: url.hostname,
+            port: url.port || 443,
+            path: url.pathname + url.search,
+            method: options.method || 'GET',
+            headers: headers,
+            lookup: (hostname, dnsOptions, callback) => {
+                dns.lookup(hostname, { ...dnsOptions, family: 4 }, callback);
+            }
+        };
+
+        const req = https.request(reqOptions, (res) => {
+            if (isDone) {
+                res.destroy();
+                return;
+            }
+
+            if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
+                cleanup();
+                req.destroy();
+                const err = new Error('unexpected redirect');
+                err.name = 'TypeError';
+                return reject(err);
+            }
+
+            if (res.statusCode < 200 || res.statusCode >= 300) {
+                cleanup();
+                req.destroy();
+                return reject(new Error(`CDSE access unavailable (HTTP ${res.statusCode}); check account permissions/quota`));
+            }
+
+            const contentLength = res.headers['content-length'];
+            if (contentLength && Number(contentLength) > maxBytes) {
+                cleanup();
+                req.destroy();
+                return reject(new Error('CDSE response exceeds size limit'));
+            }
+
+            let bytes = 0;
+            const chunks = [];
+
+            res.on('data', (chunk) => {
+                bytes += chunk.length;
+                if (bytes > maxBytes) {
+                    cleanup();
+                    res.destroy();
+                    reject(new Error('CDSE response exceeds size limit'));
+                } else {
+                    chunks.push(chunk);
+                }
+            });
+
+            res.on('end', () => {
+                if (isDone) return;
+                cleanup();
+                
+                const buffer = Buffer.concat(chunks);
+                const headersMap = {
+                    get: (name) => res.headers[name.toLowerCase()] || null
+                };
+
+                resolve({
+                    ok: true,
+                    status: res.statusCode,
+                    headers: headersMap,
+                    json: async () => JSON.parse(buffer.toString('utf8')),
+                    arrayBuffer: async () => buffer,
+                });
+            });
+
+            res.on('error', (err) => {
+                if (isDone) return;
+                cleanup();
+                if (err.name === 'TimeoutError' || err.name === 'AbortError') {
+                    return reject(new Error('CDSE request timed out; retry manually'));
+                }
+                reject(err);
+            });
+        });
+
+        req.on('error', (err) => {
+            if (isDone) return;
+            cleanup();
+            if (err.name === 'TimeoutError' || err.name === 'AbortError') {
+                return reject(new Error('CDSE request timed out; retry manually'));
+            }
+            reject(err);
+        });
+
+        timer = setTimeout(() => {
+            if (isDone) return;
+            cleanup();
+            req.destroy();
+            const err = new Error('CDSE request timed out; retry manually');
+            err.name = 'TimeoutError';
+            reject(err);
+        }, limits.requestMs);
+
+        if (options.body) {
+            req.write(options.body);
+        }
+        req.end();
+    });
 }
+
 module.exports = boundedFetch;

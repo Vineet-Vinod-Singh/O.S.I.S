@@ -8,8 +8,8 @@ if (
   !rawApiUrl &&
   typeof window !== "undefined"
 ) {
-  console.warn(
-    "[OSIS] VITE_API_URL environment variable is not defined. The frontend is falling back to http://localhost:5000. Set VITE_API_URL in your Vercel deployment settings to connect to the production backend.",
+  throw new Error(
+    "VITE_API_URL environment variable must be defined for production builds. The frontend cannot fall back to localhost in production.",
   );
 }
 
