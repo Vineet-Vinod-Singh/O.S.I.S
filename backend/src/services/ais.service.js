@@ -52,6 +52,19 @@ class AISService {
     console.log('[ais] Live AIS ingestion stopped.');
   }
 
+  normalizeTimestamp(timeStr) {
+    if (!timeStr) return null;
+    let clean = timeStr;
+    if (clean.includes(' +0000 UTC')) {
+      clean = clean.replace(' +0000 UTC', 'Z');
+      clean = clean.replace(' ', 'T');
+      clean = clean.replace(/(\.\d{3})\d+Z$/, '$1Z');
+    }
+    const d = new Date(clean);
+    if (isNaN(d.getTime())) return null;
+    return d.toISOString();
+  }
+
   connect() {
     if (!this.isActive) return;
     if (this.ws) {
@@ -84,10 +97,25 @@ class AISService {
           const mmsi = message.MetaData.MMSI;
           const lat = report.Latitude;
           const lon = report.Longitude;
-          const time = message.MetaData.time_utc;
+          const rawTime = message.MetaData.time_utc;
+          const time = this.normalizeTimestamp(rawTime);
           
-          if (lat != null && lon != null && mmsi && time) {
-             this.batch.push({ mmsi, time, lat, lon });
+          if (!time) {
+            console.error(`[ais] Invalid timestamp received: ${rawTime}`);
+            return;
+          }
+          
+          let speed = null;
+          if (typeof report.Sog === 'number' && !isNaN(report.Sog) && report.Sog !== 102.3) {
+            speed = report.Sog;
+          }
+          let course = null;
+          if (typeof report.Cog === 'number' && !isNaN(report.Cog) && report.Cog !== 360) {
+            course = report.Cog;
+          }
+          
+          if (lat != null && lon != null && mmsi) {
+             this.batch.push({ mmsi, time, lat, lon, speed, course });
              this.scheduleFlush();
           }
         }
@@ -142,12 +170,12 @@ class AISService {
       let queryParams = [];
       let i = 1;
       for (const row of currentBatch) {
-        values.push(`($${i++}, $${i++}, ST_SetSRID(ST_MakePoint($${i++}, $${i++}), 4326))`);
-        queryParams.push(row.mmsi, row.time, row.lon, row.lat);
+        values.push(`($${i++}, $${i++}, ST_SetSRID(ST_MakePoint($${i++}, $${i++}), 4326), $${i++}, $${i++})`);
+        queryParams.push(row.mmsi, row.time, row.lon, row.lat, row.speed, row.course);
       }
       
       const query = `
-        INSERT INTO live_ais (mmsi, timestamp, geom) 
+        INSERT INTO live_ais (mmsi, timestamp, geom, speed, course) 
         VALUES ${values.join(', ')}
       `;
       await pool.query(query, queryParams);

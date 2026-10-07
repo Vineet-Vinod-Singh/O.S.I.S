@@ -273,11 +273,11 @@ def correlate(records, vessels, origin, window, backward):
             duration = (timestamp(b["timestamp"])-timestamp(a["timestamp"])).total_seconds()/3600
             if 0 < duration <= 1:
                 inferred = haversine_km(a["latitude"],a["longitude"],b["latitude"],b["longitude"])/duration/1.852
-                if a["speed"] is not None:
-                    speed_errors.append(abs(inferred-a["speed"]))
+                if a.get("speed") is not None:
+                    speed_errors.append(abs(inferred-a.get("speed")))
                 heading = bearing_deg(a["latitude"],a["longitude"],b["latitude"],b["longitude"])
-                if a["course"] is not None:
-                    heading_errors.append(abs((heading-a["course"]+180)%360-180))
+                if a.get("course") is not None:
+                    heading_errors.append(abs((heading-a.get("course")+180)%360-180))
         features = {
             "origin_proximity":math.exp(-dist/4),
             "temporal":math.exp(-delta/2),

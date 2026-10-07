@@ -278,7 +278,7 @@ async function analyze(input = {}, trusted = null) {
                             const start = new Date(end.getTime() - (hindcastHours * 3600000));
                             const [west, south, east, north] = sceneMeta.bbox;
                             const res = await pool.query(
-                                `SELECT mmsi, timestamp, ST_Y(geom) as latitude, ST_X(geom) as longitude 
+                                `SELECT mmsi, timestamp, ST_Y(geom) as latitude, ST_X(geom) as longitude, speed, course 
                                  FROM live_ais 
                                  WHERE timestamp >= $1 AND timestamp <= $2 
                                  AND geom && ST_MakeEnvelope($3, $4, $5, $6, 4326)`,
@@ -288,7 +288,9 @@ async function analyze(input = {}, trusted = null) {
                                 mmsi: r.mmsi,
                                 timestamp: r.timestamp.toISOString(),
                                 latitude: r.latitude,
-                                longitude: r.longitude
+                                longitude: r.longitude,
+                                speed: r.speed !== undefined ? r.speed : null,
+                                course: r.course !== undefined ? r.course : null
                             }));
                         } else {
                             pipelineInput.live_ais_records = [];
