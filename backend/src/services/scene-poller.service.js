@@ -99,12 +99,13 @@ async function loadState() {
 async function saveState({ lastPollAt, lastSceneAt, pollCount, scenesQueued }) {
   try {
     await pool.query(
-      `UPDATE ingestion_state
-         SET last_polled_at = $1,
-             last_scene_at  = GREATEST(last_scene_at, $2),
-             poll_count     = $3,
-             scenes_queued  = $4
-       WHERE singleton = TRUE`,
+      `INSERT INTO ingestion_state (singleton, last_polled_at, last_scene_at, poll_count, scenes_queued)
+       VALUES (TRUE, $1, $2, $3, $4)
+       ON CONFLICT (singleton) DO UPDATE
+         SET last_polled_at = EXCLUDED.last_polled_at,
+             last_scene_at  = GREATEST(ingestion_state.last_scene_at, EXCLUDED.last_scene_at),
+             poll_count     = EXCLUDED.poll_count,
+             scenes_queued  = EXCLUDED.scenes_queued`,
       [lastPollAt, lastSceneAt, pollCount, scenesQueued]
     );
   } catch (err) {
@@ -321,4 +322,4 @@ function status() {
   };
 }
 
-module.exports = { start, stop, status, pollOnce };
+module.exports = { start, stop, status, pollOnce, AOI_BBOX };

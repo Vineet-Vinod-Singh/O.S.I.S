@@ -55,6 +55,26 @@ router.post('/process-next', async (req, res, next) => {
 });
 
 // ---------------------------------------------------------------------------
+// POST /process/:id — manually process one queued processed_scenes row
+// ---------------------------------------------------------------------------
+router.post('/process/:id', async (req, res, next) => {
+  const rawId = req.params.id;
+  const id = /^\d+$/.test(rawId) ? Number(rawId) : NaN;
+  if (!Number.isSafeInteger(id) || id <= 0) {
+    return res.status(400).json({ ok: false, error: 'id must be a positive integer' });
+  }
+  try {
+    const result = await worker.processSceneById(id);
+    if (result.status === 'not_queued') {
+      return res.status(409).json({ ok: false, result });
+    }
+    res.json({ ok: true, result });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// ---------------------------------------------------------------------------
 // POST /recover-stale
 // ---------------------------------------------------------------------------
 router.post('/recover-stale', async (req, res, next) => {

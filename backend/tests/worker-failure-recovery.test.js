@@ -179,7 +179,7 @@ test('detection error is persisted in processed_scenes.error_message with [detec
        scene_id, collection, status, acquired_at, bbox, retry_count
      ) VALUES (
        $1, 'sentinel-1-grd', 'queued', '1970-01-01T00:00:01Z',
-       '[74.7, 13.2, 74.78, 13.28]'::jsonb, 0
+       '[69.0, 19.0, 71.0, 21.0]'::jsonb, 0
      )
      ON CONFLICT (scene_id, collection) DO UPDATE
        SET status = 'queued', acquired_at = '1970-01-01T00:00:01Z', incident_id = NULL, error_message = NULL`,
@@ -232,7 +232,7 @@ test('worker remains usable and operational after a scene fails acquisition', as
        scene_id, collection, status, acquired_at, bbox, retry_count
      ) VALUES (
        $1, 'sentinel-1-grd', 'queued', '1970-01-01T00:00:01Z',
-       '[74.7, 13.2, 74.78, 13.28]'::jsonb, 0
+       '[69.0, 19.0, 71.0, 21.0]'::jsonb, 0
      )
      ON CONFLICT (scene_id, collection) DO UPDATE
        SET status = 'queued', acquired_at = '1970-01-01T00:00:01Z', retry_count = 0, error_message = NULL`,
@@ -281,7 +281,7 @@ test('worker remains usable and operational after a scene fails acquisition', as
          scene_id, collection, status, acquired_at, bbox, retry_count
        ) VALUES (
          $1, 'sentinel-1-grd', 'queued', '1970-01-01T00:00:02Z',
-         '[74.7, 13.2, 74.78, 13.28]'::jsonb, 0
+         '[69.0, 19.0, 71.0, 21.0]'::jsonb, 0
        )
        ON CONFLICT (scene_id, collection) DO UPDATE
          SET status = 'queued', acquired_at = '1970-01-01T00:00:02Z', retry_count = 0`,

@@ -40,20 +40,28 @@ class StrictEnvironmentProvider:
     """Nearest neighbour with coverage/tolerance/units/finite checks on EVERY RK4 sample."""
     values = {"leeway": .03, "velocity_uncertainty_ms": .15}
 
-    def __init__(self, current_path=None, wind_path=None):
+    def __init__(self, current_path=False, wind_path=False):
         self.datasets = []
         self._opened = []
         self.meta = {"source": "CMEMS/ERA5 local reanalysis", "kind": "REAL_REANALYSIS",
                      "sampling": "nearest; no extrapolation or missing-value substitution",
                      "leeway": .03, "velocity_uncertainty_ms": .15}
+        self.has_wind = True
         try:
             import numpy as np
             import xarray as xr
             self.np = np
-            for label, path, variables, tolerance, spatial_limit in (
-                ("current", current_path or os.environ.get("REAL_CURRENT_NETCDF"), ("uo", "vo"), 13, .15),
-                ("wind", wind_path or os.environ.get("REAL_WIND_NETCDF"), ("u10", "v10"), 1, .3),
-            ):
+            c_path = os.environ.get("REAL_CURRENT_NETCDF") if current_path is False else current_path
+            w_path = os.environ.get("REAL_WIND_NETCDF") if wind_path is False else wind_path
+            
+            configs = [("current", c_path, ("uo", "vo"), 13, .15)]
+            if w_path is not None:
+                configs.append(("wind", w_path, ("u10", "v10"), 1, .3))
+            else:
+                self.has_wind = False
+                self.meta["wind_status"] = "intentionally unavailable; wind advection disabled"
+                
+            for label, path, variables, tolerance, spatial_limit in configs:
                 file, digest = asset(path, 128 * 1024 * 1024)
                 ds = xr.open_dataset(file)
                 self._opened.append(ds)
@@ -141,7 +149,11 @@ class StrictEnvironmentProvider:
                 result[{"uo": "current_u_ms", "vo": "current_v_ms",
                         "u10": "wind_u_ms", "v10": "wind_v_ms"}[name]] = value
         if len(result) != 5:
-            raise Unavailable("Both real current and wind fields are required")
+            if not getattr(self, "has_wind", True) and len(result) == 3:
+                result["wind_u_ms"] = 0.0
+                result["wind_v_ms"] = 0.0
+            else:
+                raise Unavailable("Both real current and wind fields are required")
         return result
 
     def close(self):

@@ -86,7 +86,7 @@ function runPipeline(input) {
             } else output += data.toString();
         });
         // Do not echo arbitrary process output or credentials to API clients/logs.
-        child.stderr.resume();
+        child.stderr.on('data', (data) => console.error('[PYTHON STDERR]', data.toString()));
         child.stdin.on('error', () => {});
         child.on('close', (code) => {
             if (code !== 0)
@@ -176,7 +176,7 @@ async function analyze(input = {}, trusted = null) {
     const forecastHours = input.forecastHours ?? 24;
     if (
         mode === 'REAL'
-            ? !archivedScenes.some((s) => s.id === sceneId)
+            ? !trusted && !archivedScenes.some((s) => s.id === sceneId)
             : mode === 'DEMO' &&
               ![
                   'demo-arabian-sea',
@@ -249,7 +249,7 @@ async function analyze(input = {}, trusted = null) {
             trusted = await sarInput.onDemand(
                 archivedScenes.find((s) => s.id === sceneId),
             );
-        const result = await runPipeline({
+        const pipelineInput = {
             mode,
             sceneId,
             forecastHours,
@@ -262,7 +262,48 @@ async function analyze(input = {}, trusted = null) {
                       _unavailable: trusted._unavailable,
                   }
                 : {}),
-        });
+        };
+
+        if (mode === 'REAL') {
+            const isOfflineReplay = !trusted && archivedScenes.some((s) => s.id === sceneId);
+            pipelineInput.ais_mode = isOfflineReplay ? 'OFFLINE_REPLAY' : 'LIVE';
+
+            if (pipelineInput.ais_mode === 'LIVE') {
+                if (process.env.AIS_AUTOSTART === 'true') {
+                    try {
+                        const pool = require('../config/db');
+                        const sceneMeta = trusted ? trusted._scene : archivedScenes.find((s) => s.id === sceneId);
+                        if (sceneMeta && sceneMeta.acquiredAt && sceneMeta.bbox) {
+                            const end = new Date(sceneMeta.acquiredAt);
+                            const start = new Date(end.getTime() - (hindcastHours * 3600000));
+                            const [west, south, east, north] = sceneMeta.bbox;
+                            const res = await pool.query(
+                                `SELECT mmsi, timestamp, ST_Y(geom) as latitude, ST_X(geom) as longitude 
+                                 FROM live_ais 
+                                 WHERE timestamp >= $1 AND timestamp <= $2 
+                                 AND geom && ST_MakeEnvelope($3, $4, $5, $6, 4326)`,
+                                [start.toISOString(), end.toISOString(), west - 0.5, south - 0.5, east + 0.5, north + 0.5]
+                            );
+                            pipelineInput.live_ais_records = res.rows.map(r => ({
+                                mmsi: r.mmsi,
+                                timestamp: r.timestamp.toISOString(),
+                                latitude: r.latitude,
+                                longitude: r.longitude
+                            }));
+                        } else {
+                            pipelineInput.live_ais_records = [];
+                        }
+                    } catch (err) {
+                        console.error(`[incident ${id}] Live AIS query failed:`, err.message);
+                        pipelineInput.live_ais_records = [];
+                    }
+                } else {
+                    pipelineInput.live_ais_records = [];
+                }
+            }
+        }
+
+        const result = await runPipeline(pipelineInput);
         const report = {
             ...result,
             mode,

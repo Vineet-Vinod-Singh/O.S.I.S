@@ -134,9 +134,9 @@ def read_calibrate_raster(path: Path, units=None):
     if units not in (None, "linear", "db"):
         raise ValueError("Expected explicit linear or db units")
     if units == "linear" or (units is None and arr.min() >= 0.0 and arr.mean() < 1.0):
-        valid = np.isfinite(arr) & (arr > 0)
+        valid = np.isfinite(arr) & (arr >= 0)
         db = np.full_like(arr, -9999.0)
-        db[valid] = 10.0 * np.log10(arr[valid])
+        db[valid] = 10.0 * np.log10(np.maximum(arr[valid], 1e-5))
         return db, valid
     else:
         valid = np.isfinite(arr) & (arr > -9000.0)

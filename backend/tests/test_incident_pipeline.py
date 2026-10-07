@@ -99,6 +99,27 @@ class IncidentPipelineTests(unittest.TestCase):
         with patch("incident_pipeline.rk4_step_backward", side_effect=ValueError("Something completely different")):
             with self.assertRaises(ValueError):
                 p.drift(centroid, r["scene"]["acquiredAt"], 24, env)
+                
+    def test_trajectory_terminal_coordinate_not_retained(self):
+        # valid point -> valid RK4 step -> candidate reaches invalid boundary -> trajectory stops -> invalid candidate is NOT included
+        r = self.report
+        centroid = r["spill"]["metrics"]["centroid"]
+        
+        class FailingEnvironment(p.FixtureEnvironmentProvider):
+            def __init__(self, values):
+                super().__init__(values)
+                self.calls = 0
+            def get_environment(self, lat, lon, when):
+                self.calls += 1
+                if self.calls > 1:
+                    raise ValueError("Environmental sample contains missing or nonfinite values")
+                return super().get_environment(lat, lon, when)
+                
+        failing_env = FailingEnvironment(self.scenario["environment"])
+        # Should return exactly 1 point (the origin) since the second point (first RK4 candidate) fails get_environment
+        forward = p.drift(centroid, r["scene"]["acquiredAt"], 24, failing_env)
+        self.assertEqual(len(forward), 1)
+        self.assertEqual(forward[0]["hours"], 0)
 
     def test_ais_normalization_csv_and_rejections(self):
         rows, _ = p.demo_ais(self.scenario)

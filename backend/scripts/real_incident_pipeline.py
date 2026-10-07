@@ -134,7 +134,13 @@ def _analyze(payload):
     if sar["detector"].get("outcome") == "ANALYSIS_INCONCLUSIVE":
         return report
     try:
-        with contextlib.closing(StrictEnvironmentProvider()) as environment:
+        if "environment" in scene:
+            current_path = str((ROOT / "data" / scene["environment"]["current"]).resolve()) if "current" in scene["environment"] else None
+            wind_path = str((ROOT / "data" / scene["environment"]["wind"]).resolve()) if "wind" in scene["environment"] else None
+            env_provider = StrictEnvironmentProvider(current_path=current_path, wind_path=wind_path)
+        else:
+            env_provider = StrictEnvironmentProvider()
+        with contextlib.closing(env_provider) as environment:
             centroid = report["spill"]["metrics"]["centroid"]
             environment.get_environment(centroid["lat"], centroid["lon"], timestamp(scene["acquiredAt"]))
             report["environment"] = environment.meta
@@ -165,10 +171,29 @@ def _analyze(payload):
                       geometry={"type": "Point", "coordinates": [origin["lon"], origin["lat"]]})
         report["origin"] = origin
         try:
-            records, vessels, meta = historical_ais(origin, window, normalize_ais, timestamp)
-            report["ais"] = meta
-            stage("ais", "completed", "REAL", "Observed local AIS fixes normalized and restricted to scenario region/window")
-            report["provenance"]["ais"] = "REAL operator-attested historical AIS; asset/manifest hashes in ais"
+            ais_mode = payload.get("ais_mode", "OFFLINE_REPLAY")
+            if ais_mode == "LIVE":
+                records = payload.get("live_ais_records", [])
+                if records:
+                    vessels = [
+                        {"mmsi": mmsi, "name": "Unknown", "type": "Unknown"}
+                        for mmsi in {row["mmsi"] for row in records}
+                    ]
+                    meta = {"source": "AISStream", "kind": "LIVE", "records": len(records), "coverage": "real-time"}
+                    report["ais"] = meta
+                    stage("ais", "completed", "LIVE", "Live AIS fixes queried from local PostGIS bounding box")
+                    report["provenance"]["ais"] = "LIVE real-time AISStream fixes"
+                else:
+                    records, vessels, meta = [], [], {"source": "AIS_UNAVAILABLE", "kind": "NONE"}
+                    report["ais"] = meta
+                    stage("ais", "unavailable", "LIVE", "Live AIS is unavailable or returned zero vessels")
+                    report["provenance"]["ais"] = "LIVE real-time AISStream unavailable"
+            else:
+                records, vessels, meta = historical_ais(origin, window, normalize_ais, timestamp)
+                report["ais"] = meta
+                stage("ais", "completed", "REAL", "Observed local AIS fixes normalized and restricted to scenario region/window")
+                report["provenance"]["ais"] = "REAL operator-attested historical AIS; asset/manifest hashes in ais"
+                
             candidates, anomalies = correlate(records, vessels, origin, window, report["backward"])
             for c in candidates:
                 c["evidence"] = c["evidence"].replace("central release estimate", "analyst-selected scenario time")

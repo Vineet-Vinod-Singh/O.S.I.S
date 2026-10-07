@@ -160,14 +160,18 @@ def drift(centroid, acquired, hours, environment, backward=False):
         step = min(1, hours-elapsed)
         signed_seconds = step*3600*(1 if backward else -1)
         try:
-            lat, lon, _ = rk4_step_backward(lat, lon, time, signed_seconds, e["leeway"],
+            next_lat, next_lon, _ = rk4_step_backward(lat, lon, time, signed_seconds, e["leeway"],
                                            provider=environment)
+            next_time = time - dt.timedelta(seconds=signed_seconds)
+            if hasattr(environment, "get_environment"):
+                environment.get_environment(next_lat, next_lon, next_time)
         except ValueError as exc:
             msg = str(exc)
             if "missing or nonfinite" in msg or "outside spatial or temporal" in msg:
                 break
             raise
-        time -= dt.timedelta(seconds=signed_seconds)
+        lat, lon = next_lat, next_lon
+        time = next_time
         elapsed += step
     return points
 

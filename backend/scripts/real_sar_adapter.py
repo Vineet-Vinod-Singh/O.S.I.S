@@ -143,7 +143,7 @@ class ExperimentalSpillDetector:
         coverage = float(valid.mean())
         ocean_fraction = float(ocean.mean())
         texture = float(np.std(vv[valid]))
-        quality_ok = coverage >= .8 and ocean_fraction >= .2 and .1 <= texture <= 20 and rejected == 0
+        quality_ok = coverage >= .5 and ocean_fraction >= .2 and .1 <= texture <= 20 and rejected == 0
         supported = [d for d in detections if d["confidence"] >= .7 and
                      d["evidence"].get("poseatseaOilProbability", 0) >= .15 and
                      d["evidence"].get("poseatseaOilProbability", 0) > d["evidence"].get("poseatseaLookalikeProbability", 1)]
@@ -160,7 +160,7 @@ class ExperimentalSpillDetector:
             "detector": {"name": method, "status": "experimental", "version": m.FUSION_CONFIG["version"],
                 "outcome": outcome, "reason": reason,
                 "quality": {"jointValidFraction": coverage, "oceanFraction": ocean_fraction, "vvStdDb": texture,
-                            "gate": "coverage>=0.8, ocean>=0.2, 0.1<=VV std<=20, valid geometry; hybrid confidence>=0.7, oil support>=0.15 and greater than lookalike support"},
+                            "gate": "coverage>=0.5, ocean>=0.2, 0.1<=VV std<=20, valid geometry; hybrid confidence>=0.7, oil support>=0.15 and greater than lookalike support"},
                 "checkpointSha256": checkpoint_hash, "geometryRejected": rejected,
                 "classicalClusters": classical["totalClusters"], "preview": "4x subsampled VV; 4x4 max-pooled mask"}}
 

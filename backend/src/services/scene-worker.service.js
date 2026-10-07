@@ -29,6 +29,7 @@ const { randomUUID } = require('node:crypto');
 const pool = require('../config/db');
 const sentinel = require('./sentinel.service');
 const incidentService = require('./incident.service');
+const poller = require('./scene-poller.service');
 
 // ---------------------------------------------------------------------------
 // Configuration
@@ -169,6 +170,41 @@ async function claimNextScene() {
   }
 }
 
+/** Atomically claim only the requested queued scene. */
+async function claimSceneById(id) {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const { rows } = await client.query(
+      `SELECT id, scene_id, collection, bbox, acquired_at, polarization,
+              platform, orbit_direction, stac_feature
+         FROM processed_scenes
+        WHERE id = $1 AND status = 'queued'
+        FOR UPDATE SKIP LOCKED`,
+      [id]
+    );
+    if (rows.length === 0) {
+      await client.query('ROLLBACK');
+      return null;
+    }
+    const scene = rows[0];
+    await client.query(
+      `UPDATE processed_scenes
+          SET status = 'processing', processing_at = NOW(), worker_id = $1,
+              error_message = NULL
+        WHERE id = $2`,
+      [WORKER_ID, scene.id]
+    );
+    await client.query('COMMIT');
+    return scene;
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
 /**
  * Mark a scene as successfully completed, storing artifact metadata.
  * @param {number} id - processed_scenes.id
@@ -263,6 +299,27 @@ async function acquireScene(scene) {
     throw new Error(`Scene ${scene_id}: no valid bbox available for acquisition`);
   }
 
+  // --- Verify AOI containment ---
+  const [sceneMinLon, sceneMinLat, sceneMaxLon, sceneMaxLat] = bbox;
+  const [aoiMinLon, aoiMinLat, aoiMaxLon, aoiMaxLat] = poller.AOI_BBOX;
+
+  // We require the configured AOI to be strictly within the scene footprint.
+  // CDSE raster subsetting may fail if the requested bounding box extends beyond the available image data.
+  // Allow a tiny floating point epsilon (0.0001 degrees) just in case.
+  const eps = 0.0001;
+  if (
+    aoiMinLon < sceneMinLon - eps ||
+    aoiMaxLon > sceneMaxLon + eps ||
+    aoiMinLat < sceneMinLat - eps ||
+    aoiMaxLat > sceneMaxLat + eps
+  ) {
+    throw new Error(`Scene ${scene_id}: Configured AOI [${poller.AOI_BBOX.join(',')}] is not within the scene footprint [${bbox.join(',')}]`);
+  }
+
+  // The actual raster acquisition request MUST use the configured OSIS acquisition AOI,
+  // NOT the full Sentinel-1 scene footprint (which is too large and would fail validateSubset).
+  const acquisitionBbox = poller.AOI_BBOX;
+
   // --- Resolve acquisition timestamp ---
   if (!acquired_at) {
     throw new Error(`Scene ${scene_id}: no acquired_at timestamp — cannot derive download window`);
@@ -294,7 +351,7 @@ async function acquireScene(scene) {
       tiffMeta[pol] = { sizeBytes: stat.size, fromCache: true };
     } else {
       const result = await sentinel.getSentinel1GrdImage({
-        bbox,
+        bbox: acquisitionBbox,
         from: fromTime,
         to: toTime,
         width: 512,
@@ -314,7 +371,8 @@ async function acquireScene(scene) {
     sceneDir,
     paths,
     tiffMeta,
-    bbox,
+    bbox, // Full CDSE scene footprint
+    acquisitionBbox, // Sub-setting AOI used for raster download
     acquiredAt: fromTime,
     downloadedAt: new Date().toISOString(),
     workerId: WORKER_ID,
@@ -332,13 +390,30 @@ async function acquireScene(scene) {
  * @returns {Promise<{claimed: boolean, sceneId?: string, status: string, error?: string}>}
  */
 async function processNextScene() {
-  let scene = null;
   try {
-    scene = await claimNextScene();
+    const scene = await claimNextScene();
     if (!scene) {
       return { claimed: false, status: 'empty_queue' };
     }
+    return await processClaimedScene(scene);
+  } catch (err) {
+    return handleClaimFailure(err);
+  }
+}
 
+/** Process one specific queued scene through the standard pipeline. */
+async function processSceneById(id) {
+  try {
+    const scene = await claimSceneById(id);
+    if (!scene) return { claimed: false, status: 'not_queued' };
+    return await processClaimedScene(scene);
+  } catch (err) {
+    return handleClaimFailure(err);
+  }
+}
+
+async function processClaimedScene(scene) {
+  try {
     console.log(`[worker] Claimed scene: ${scene.scene_id} (id=${scene.id})`);
     _lastActivity = new Date();
 
@@ -346,23 +421,35 @@ async function processNextScene() {
     await markCompleted(scene.id, artifact);
 
     try {
-      const trusted = {
+        const trusted = {
         _scene: {
           id: scene.scene_id,
           mode: 'REAL',
           source: 'cdse_sentinel1',
           acquiredAt: artifact.acquiredAt,
-          bbox: artifact.bbox,
+          bbox: artifact.acquisitionBbox || artifact.bbox,
+          stacBbox: artifact.bbox,
           polarization: artifact.polarizations,
           rasterUnits: 'linear'
         },
         _paths: artifact.paths
       };
 
+      // Apply environment override if configured for this scene
+      const SCENE_ENVIRONMENT_OVERRIDES = {
+        'S1D_IW_GRDH_1SDV_20261005T011017_20261005T011042_004873_0092A1_0488_COG.SAFE': {
+          current: 'environment/arabian_sea/cmems_arabian_sea_20261005.nc'
+        }
+      };
+      const envOverride = SCENE_ENVIRONMENT_OVERRIDES[scene.scene_id];
+      if (envOverride) {
+        trusted._scene.environment = envOverride;
+      }
+
       const report = await incidentService.analyze(
         {
           mode: 'REAL',
-          sceneId: 's1a-20240619-karnataka',
+          sceneId: scene.scene_id,
           detector: 'hybrid',
           forecastHours: 24,
           hindcastHours: 6
@@ -405,20 +492,22 @@ async function processNextScene() {
     const safeMsg = String(err.message || 'Unknown error');
     _lastError = safeMsg;
 
-    if (scene) {
-      _failedCount++;
-      console.error(`[worker] Failed scene ${scene.scene_id}:`, safeMsg);
-      try {
-        await markFailed(scene.id, safeMsg);
-      } catch (dbErr) {
-        console.error('[worker] Could not write failure to DB:', String(dbErr.message).slice(0, 200));
-      }
-      return { claimed: true, sceneId: scene.scene_id, status: 'failed', error: safeMsg };
-    } else {
-      console.error('[worker] Claim error:', safeMsg);
-      return { claimed: false, status: 'claim_error', error: safeMsg };
+    _failedCount++;
+    console.error(`[worker] Failed scene ${scene.scene_id}:`, safeMsg);
+    try {
+      await markFailed(scene.id, safeMsg);
+    } catch (dbErr) {
+      console.error('[worker] Could not write failure to DB:', String(dbErr.message).slice(0, 200));
     }
+    return { claimed: true, sceneId: scene.scene_id, status: 'failed', error: safeMsg };
   }
+}
+
+function handleClaimFailure(err) {
+  const safeMsg = String(err.message || 'Unknown error');
+  _lastError = safeMsg;
+  console.error('[worker] Claim error:', safeMsg);
+  return { claimed: false, status: 'claim_error', error: safeMsg };
 }
 
 /**
@@ -516,9 +605,11 @@ module.exports = {
   startWorker,
   stopWorker,
   processNextScene,
+  processSceneById,
   workerStatus,
   // Exported for testing only:
   claimNextScene,
+  claimSceneById,
   markCompleted,
   markFailed,
   recoverStaleScenes,

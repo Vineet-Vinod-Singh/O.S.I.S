@@ -15,6 +15,7 @@ const scenePoller = require('./services/scene-poller.service');
 // DAY 2 — autonomous acquisition worker
 const workerRoutes = require('./routes/worker.routes');
 const sceneWorker = require('./services/scene-worker.service');
+const aisService = require('./services/ais.service');
 
 const app = express();
 
@@ -47,6 +48,11 @@ if (process.env.OSIS_WORKER_AUTOSTART === 'true') {
   sceneWorker.startWorker().catch(err =>
     console.error('[app] Scene worker auto-start failed:', err.message)
   );
+}
+
+// Auto-start the live AIS ingestion service
+if (process.env.AIS_AUTOSTART === 'true') {
+  aisService.start();
 }
 
 // Basic error handling middleware

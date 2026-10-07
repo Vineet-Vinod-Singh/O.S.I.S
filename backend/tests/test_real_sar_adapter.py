@@ -68,7 +68,9 @@ class RasterTests(unittest.TestCase):
         self.write(arr)
         db, valid = self.m.read_calibrate_raster(self.file, "linear")
         self.assertAlmostEqual(float(db[1, 1]), -20, places=4)
-        self.assertFalse(valid[0, :4].any())
+        self.assertTrue(valid[0, 0])
+        self.assertAlmostEqual(float(db[0, 0]), -50, places=4)
+        self.assertFalse(valid[0, 1:4].any())
         with self.assertRaises(ValueError):
             self.m.read_calibrate_raster(self.file, "unknown")
         arr[:] = -9999
@@ -125,6 +127,37 @@ class RasterTests(unittest.TestCase):
             result = self.detect()
         self.assertEqual(result["detector"]["outcome"], "ANALYSIS_INCONCLUSIVE")
 
+    def test_coverage_thresholds(self):
+        rng = self.m.np.random.default_rng(12345)
+        base = rng.normal(-25, 2, (512, 512)).astype(self.m.np.float32)
+        arr = base.copy()
+        
+        # 0.49 fails the hard validity gate immediately
+        arr[:] = -9999
+        arr[:251] = base[:251]  # 251 / 512 = 0.4902
+        self.write(arr)
+        with patch.object(a, "experiment", return_value=self.m):
+            with self.assertRaisesRegex(ValueError, "50%"):
+                self.detect()
+                
+        # 0.50 passes the hard validity gate and meets the scene quality coverage floor
+        arr[:] = -9999
+        arr[:256] = base[:256]  # 256 / 512 = 0.500
+        self.write(arr)
+        with patch.object(a, "experiment", return_value=self.m), patch.object(self.m, "run_classical_candidates", return_value={"retainedCandidates": [], "totalClusters": 0}):
+            result = self.detect()
+            self.assertIn("coverage>=0.5", result["detector"]["quality"]["gate"])
+            self.assertEqual(result["detector"]["outcome"], "NO_SPILL_DETECTED")
+            self.assertAlmostEqual(result["detector"]["quality"]["jointValidFraction"], 0.5)
+
+        # 0.708 (real Sentinel-1 scene case) passes perfectly
+        arr[:] = -9999
+        arr[:363] = base[:363]  # 363 / 512 = 0.7089
+        self.write(arr)
+        with patch.object(a, "experiment", return_value=self.m), patch.object(self.m, "run_classical_candidates", return_value={"retainedCandidates": [], "totalClusters": 0}):
+            result = self.detect()
+            self.assertEqual(result["detector"]["outcome"], "NO_SPILL_DETECTED")
+            self.assertAlmostEqual(result["detector"]["quality"]["jointValidFraction"], 0.708984375)
 
 if __name__ == "__main__":
     unittest.main()
