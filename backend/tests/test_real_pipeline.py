@@ -151,6 +151,34 @@ class RealPipelineTests(unittest.TestCase):
         self.assertIsNone(report["age"])
         json.dumps(report, allow_nan=False)
 
+    @patch("real_incident_pipeline.correlate")
+    @patch("real_incident_pipeline.drift")
+    @patch("real_incident_pipeline.StrictEnvironmentProvider")
+    @patch("real_incident_pipeline.run_sar")
+    def test_live_ais_records_are_normalized(self, mock_sar, mock_env, mock_drift, mock_correlate):
+        mock_sar.return_value = self.sar
+        env_instance = mock_env.return_value
+        env_instance.meta = {"kind": "MOCK"}
+        mock_drift.return_value = [{"lat": 12.0, "lon": 74.0, "timestamp": "2024-06-18T18:48:37Z", "hours": -6}]
+        mock_correlate.return_value = ([], [])
+
+        payload = copy.deepcopy(self.payload)
+        payload["ais_mode"] = "LIVE"
+        payload["live_ais_records"] = [
+            {"mmsi": "123456789", "timestamp": "2024-06-18T18:00:00Z", "latitude": 12.1, "longitude": 74.1, "speed": 10.0, "course": 90.0},
+            {"mmsi": "123456789", "timestamp": "2024-06-18T17:00:00Z", "latitude": 12.2, "longitude": 74.2, "speed": 10.0, "course": 90.0},
+            {"mmsi": "123456789", "timestamp": "2024-06-18T19:00:00Z", "latitude": 12.0, "longitude": 74.0, "speed": 10.0, "course": 90.0}
+        ]
+
+        p.analyze(payload)
+        
+        mock_correlate.assert_called_once()
+        records_passed = mock_correlate.call_args[0][0]
+        self.assertEqual(len(records_passed), 3)
+        self.assertEqual(records_passed[0]["timestamp"], "2024-06-18T17:00:00Z")
+        self.assertEqual(records_passed[1]["timestamp"], "2024-06-18T18:00:00Z")
+        self.assertEqual(records_passed[2]["timestamp"], "2024-06-18T19:00:00Z")
+
 
 if __name__ == "__main__":
     unittest.main()

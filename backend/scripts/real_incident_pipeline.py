@@ -173,13 +173,14 @@ def _analyze(payload):
         try:
             ais_mode = payload.get("ais_mode", "OFFLINE_REPLAY")
             if ais_mode == "LIVE":
-                records = payload.get("live_ais_records", [])
-                if records:
+                raw_records = payload.get("live_ais_records", [])
+                if raw_records:
+                    records, rejected = normalize_ais(raw_records)
                     vessels = [
                         {"mmsi": mmsi, "name": "Unknown", "type": "Unknown"}
                         for mmsi in {row["mmsi"] for row in records}
                     ]
-                    meta = {"source": "AISStream", "kind": "LIVE", "records": len(records), "coverage": "real-time"}
+                    meta = {"source": "AISStream", "kind": "LIVE", "records": len(records), "rejected": rejected, "coverage": "real-time"}
                     report["ais"] = meta
                     stage("ais", "completed", "LIVE", "Live AIS fixes queried from local PostGIS bounding box")
                     report["provenance"]["ais"] = "LIVE real-time AISStream fixes"

@@ -275,7 +275,8 @@ async function analyze(input = {}, trusted = null) {
                         const sceneMeta = trusted ? trusted._scene : archivedScenes.find((s) => s.id === sceneId);
                         if (sceneMeta && sceneMeta.acquiredAt && sceneMeta.bbox) {
                             const end = new Date(sceneMeta.acquiredAt);
-                            const start = new Date(end.getTime() - (hindcastHours * 3600000));
+                            const windowHalfWidthHours = 1;
+                            const start = new Date(end.getTime() - ((hindcastHours + windowHalfWidthHours) * 3600000));
                             const [west, south, east, north] = sceneMeta.bbox;
                             const res = await pool.query(
                                 `SELECT mmsi, timestamp, ST_Y(geom) as latitude, ST_X(geom) as longitude, speed, course 
