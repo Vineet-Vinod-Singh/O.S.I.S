@@ -66,44 +66,110 @@ async function getAccessToken() {
   return cachedToken;
 }
 
+const STAC_PAGE_SIZE = parseInt(process.env.STAC_PAGE_SIZE, 10) || 50;
+const STAC_MAX_PAGES = parseInt(process.env.STAC_MAX_PAGES, 10) || 10;
+
 /**
  * Search Copernicus Data Space STAC Catalog for Sentinel-1 scenes
  * @param {Object} options
  * @param {[number, number, number, number]} options.bbox - [minLon, minLat, maxLon, maxLat]
  * @param {string} options.datetime - RFC3339 interval e.g. "2024-09-01T00:00:00Z/2024-09-07T23:59:59Z"
- * @param {number} [options.limit=5] - Max results to return
+ * @param {number} [options.limit] - Max results to return per page
  * @param {string[]} [options.collections=['sentinel-1-grd']] - Target collections
  */
 async function searchCatalog({
   bbox,
   datetime,
-  limit = 5,
+  limit = STAC_PAGE_SIZE,
   collections = ['sentinel-1-grd'],
 }) {
   const [from, to] = String(datetime).split('/');
-  validateSubset(bbox, from, to);
-  if (!Number.isInteger(limit) || limit < 1 || limit > 5) throw new Error('Catalog scene limit is 5');
-  const token = await getAccessToken();
+  const duration = Date.parse(to) - Date.parse(from);
+  if (!Number.isFinite(duration) || duration < 0 || duration > 86400000) throw new Error('Search interval must be at most 24 hours');
 
-  const payload = {
+  if (bbox !== undefined) {
+    if (!Array.isArray(bbox) || bbox.length !== 4 || !bbox.every(Number.isFinite) ||
+        !(bbox[0] >= -180 && bbox[2] <= 180 && bbox[1] >= -90 && bbox[3] <= 90 &&
+          bbox[2] > bbox[0] && bbox[3] > bbox[1])) {
+      throw new Error('Invalid bbox geometry');
+    }
+  }
+
+  const actualLimit = Math.min(Math.max(1, limit), 500);
+
+  let currentUrl = CDSE_CATALOG_URL;
+  let currentMethod = 'POST';
+  let currentHeaders = {
+    'Content-Type': 'application/json',
+    'Accept': 'application/geo+json',
+  };
+  let currentBody = JSON.stringify({
     collections,
     bbox,
     datetime,
-    limit,
-  };
-
-  const response = await fetch(CDSE_CATALOG_URL, {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${token}`,
-      'Content-Type': 'application/json',
-      'Accept': 'application/geo+json',
-    },
-    body: JSON.stringify(payload),
+    limit: actualLimit,
   });
 
-  const result = await response.json();
-  return result;
+  const allFeatures = [];
+  let pagesFetched = 0;
+  let nextLink = null;
+
+  while (pagesFetched < STAC_MAX_PAGES) {
+    const token = await getAccessToken();
+    
+    const fetchOptions = {
+      method: currentMethod,
+      headers: { ...currentHeaders, 'Authorization': `Bearer ${token}` },
+    };
+    if (currentMethod !== 'GET' && currentMethod !== 'HEAD' && currentBody) {
+      fetchOptions.body = currentBody;
+    }
+
+    console.log('Sending request to:', currentUrl, 'with method:', currentMethod, 'and body:', currentBody);
+    const response = await fetch(currentUrl, fetchOptions);
+    const data = await response.json();
+
+    if (data.features && Array.isArray(data.features)) {
+      allFeatures.push(...data.features);
+    }
+
+    pagesFetched++;
+
+    nextLink = (data.links || []).find(l => l.rel === 'next');
+    if (!nextLink) break;
+
+    currentUrl = nextLink.href;
+    currentMethod = nextLink.method || 'GET';
+
+    if (nextLink.headers) {
+      currentHeaders = { ...nextLink.headers };
+    }
+
+    if (nextLink.body) {
+      let nextBodyObj;
+      if (typeof nextLink.body === 'string') {
+        nextBodyObj = JSON.parse(nextLink.body);
+      } else {
+        nextBodyObj = nextLink.body;
+      }
+      // Merge with the original search parameters
+      currentBody = JSON.stringify({
+        collections,
+        bbox,
+        datetime,
+        limit: actualLimit,
+        ...nextBodyObj
+      });
+    } else {
+      currentBody = undefined;
+    }
+  }
+
+  if (nextLink) {
+    throw new Error(`Pagination interrupted: maximum pages (${STAC_MAX_PAGES}) reached while more results exist.`);
+  }
+
+  return { type: 'FeatureCollection', features: allFeatures };
 }
 
 /**

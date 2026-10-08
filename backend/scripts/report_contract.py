@@ -43,7 +43,7 @@ def finalize(report, mode):
     scene["footprint"] = ({"type": "Polygon", "coordinates": [[[bbox[0], bbox[1]], [bbox[2], bbox[1]],
                           [bbox[2], bbox[3]], [bbox[0], bbox[3]], [bbox[0], bbox[1]]]]} if bbox else None)
     fields = {"imagery": any(v is not None for row in scene.get("pixels", []) for v in row), "detection": stage.get("status") != "unavailable",
-              "geometry": bool(report["spill"]), "age": bool(report["age"]), "environment": bool(report["environment"]),
+              "geometry": bool(report["spill"]), "age": bool(report["age"]), "environment": bool(report["environment"]) and report["environment"].get("status") != "UNAVAILABLE",
               "origin": bool(report["origin"]), "drift": bool(report["forward"]), "ais": bool(report["ais"].get("records")),
               "vesselIdentity": bool(report["candidates"]), "vesselScore": bool(report["candidates"])}
     report["evidenceProvenance"] = {}

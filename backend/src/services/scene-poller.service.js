@@ -25,24 +25,57 @@ const { searchCatalog } = require('./sentinel.service');
 // Configuration — all values read from environment at module load time
 // ---------------------------------------------------------------------------
 
-/** AOI bbox for the Indian Ocean / Bay of Bengal watch zone [minLon,minLat,maxLon,maxLat] */
-const AOI_BBOX = (() => {
-  const raw = process.env.POLLER_AOI_BBOX;
+/** 
+ * Configurable list of priority areas for Sentinel-1 monitoring.
+ */
+const PRIORITY_AREAS = (() => {
+  const raw = process.env.POLLER_PRIORITY_AREAS_JSON;
+  let areas = [];
   if (raw) {
-    const parsed = raw.split(',').map(Number);
-    if (
-      parsed.length === 4 &&
-      parsed.every(Number.isFinite) &&
-      parsed[2] > parsed[0] && parsed[3] > parsed[1] &&          // valid box
-      (parsed[2] - parsed[0]) <= 0.2 && (parsed[3] - parsed[1]) <= 0.2  // sentinel.service limit
-    ) return parsed;
-    console.warn(
-      '[poller] POLLER_AOI_BBOX is invalid or exceeds 0.2° per side — using default Bay of Bengal AOI'
-    );
+    try {
+      areas = JSON.parse(raw);
+    } catch (e) {
+      console.warn('[poller] Invalid JSON in POLLER_PRIORITY_AREAS_JSON, falling back to default.');
+    }
   }
-  // Default: 0.19°x0.19° box in the Bay of Bengal.
-  // Must be <=0.2 degrees per side to pass sentinel.service.js validateSubset.
-  return [80.0, 9.0, 80.19, 9.19];
+  
+  if (!areas || areas.length === 0) {
+    // Default to Karnataka operational AOI
+    areas = [
+      {
+        id: 'karnataka_coast',
+        bbox: [74.70, 13.20, 74.78, 13.28],
+        priority: 100
+      }
+    ];
+  }
+
+  const validAreas = [];
+  for (const area of areas) {
+    const { id, bbox, priority } = area;
+    if (
+      id && 
+      Array.isArray(bbox) && bbox.length === 4 && bbox.every(Number.isFinite) &&
+      bbox[2] > bbox[0] && bbox[3] > bbox[1] &&
+      (bbox[2] - bbox[0]) <= 0.2 && (bbox[3] - bbox[1]) <= 0.2
+    ) {
+      validAreas.push({ id, bbox, priority: Number.isFinite(priority) ? priority : 0 });
+    } else {
+      console.warn(`[poller] Rejecting invalid priority area: ${id}`);
+    }
+  }
+
+  if (validAreas.length === 0) {
+    throw new Error('No valid priority areas configured. Must be <=0.2 degrees per side.');
+  }
+
+  // Sort descending by priority, then deterministically by id
+  validAreas.sort((a, b) => {
+    if (b.priority !== a.priority) return b.priority - a.priority;
+    return String(a.id).localeCompare(String(b.id));
+  });
+
+  return validAreas;
 })();
 
 /** How often to poll CDSE, in milliseconds (default: 15 minutes) */
@@ -57,8 +90,8 @@ const INITIAL_LOOKBACK_HOURS = (() => {
   return Number.isFinite(v) && v > 0 && v <= 72 ? v : 24;
 })();
 
-/** Max scenes to request per CDSE call (hard-capped at 5 by sentinel.service) */
-const BATCH_LIMIT = 5;
+/** Max scenes to enqueue per CDSE polling cycle (protects DB from massive spikes) */
+const POLL_QUEUE_BATCH_SIZE = parseInt(process.env.POLL_QUEUE_BATCH_SIZE, 10) || 500;
 
 // ---------------------------------------------------------------------------
 // Module state
@@ -66,6 +99,7 @@ const BATCH_LIMIT = 5;
 
 let _timer = null;
 let _running = false;
+let _inFlight = false;
 let _pollCount = 0;
 let _queuedTotal = 0;
 let _lastPollAt = null;
@@ -75,11 +109,6 @@ let _lastError = null;
 // Database helpers
 // ---------------------------------------------------------------------------
 
-/**
- * Load the persisted ingestion checkpoint from the DB.
- * Returns { last_polled_at, last_scene_at, poll_count, scenes_queued }
- * or null if DB is unavailable (graceful degradation).
- */
 async function loadState() {
   try {
     const { rows } = await pool.query(
@@ -92,10 +121,6 @@ async function loadState() {
   }
 }
 
-/**
- * Persist poller checkpoint to DB after each poll cycle.
- * Fire-and-forget — failures are logged but do not abort the poll.
- */
 async function saveState({ lastPollAt, lastSceneAt, pollCount, scenesQueued }) {
   try {
     await pool.query(
@@ -113,12 +138,6 @@ async function saveState({ lastPollAt, lastSceneAt, pollCount, scenesQueued }) {
   }
 }
 
-/**
- * Check if a given CDSE scene_id already exists in the deduplication table.
- * @param {string} sceneId
- * @param {string} collection
- * @returns {Promise<boolean>}
- */
 async function isDuplicate(sceneId, collection) {
   const { rows } = await pool.query(
     'SELECT 1 FROM processed_scenes WHERE scene_id = $1 AND collection = $2 LIMIT 1',
@@ -127,13 +146,7 @@ async function isDuplicate(sceneId, collection) {
   return rows.length > 0;
 }
 
-/**
- * Insert a new scene into `processed_scenes` with status = 'queued'.
- * On conflict (race or restart), silently skips.
- * @param {Object} feature — raw STAC GeoJSON feature from CDSE
- * @returns {Promise<boolean>} true if inserted, false if duplicate
- */
-async function enqueueScene(feature) {
+async function enqueueScene(feature, acquisitionBbox) {
   const sceneId     = feature.id;
   const collection  = feature.collection || 'sentinel-1-grd';
   const props       = feature.properties || {};
@@ -144,9 +157,7 @@ async function enqueueScene(feature) {
     ? props['sar:polarizations'].join(' ')
     : null;
 
-  // Extract bbox: STAC feature bbox is [minLon, minLat, maxLon, maxLat]
-  const bboxArr = feature.bbox || null;
-  const bboxJson = bboxArr ? JSON.stringify(bboxArr) : null;
+  const bboxJson = acquisitionBbox ? JSON.stringify(acquisitionBbox) : null;
 
   try {
     const result = await pool.query(
@@ -160,7 +171,7 @@ async function enqueueScene(feature) {
     return result.rowCount > 0;
   } catch (err) {
     console.error(`[poller] Failed to enqueue scene ${sceneId}:`, err.message);
-    return false;
+    throw err; // Throw to abort poll cycle and prevent checkpoint advancement
   }
 }
 
@@ -168,91 +179,125 @@ async function enqueueScene(feature) {
 // Core poll cycle
 // ---------------------------------------------------------------------------
 
-/**
- * Execute one poll cycle:
- *   1. Determine search window (from: lastSceneAt | initialLookback, to: now)
- *   2. Call CDSE STAC catalog
- *   3. Deduplicate and enqueue new scenes
- *   4. Persist checkpoint
- */
-async function pollOnce() {
-  _lastPollAt = new Date();
-  const now = _lastPollAt;
+function intersects(b1, b2) {
+  return !(b1[2] < b2[0] || b1[0] > b2[2] || b1[3] < b2[1] || b1[1] > b2[3]);
+}
 
-  // --- Determine search window ---
-  let state = null;
+async function pollOnce() {
+  if (_inFlight) {
+    console.log('[poller] Previous poll cycle still running — skipping poll');
+    return;
+  }
+  _inFlight = true;
   try {
-    state = await loadState();
-  } catch (_) {}
+    // Check queue capacity
+    try {
+      const { rows } = await pool.query("SELECT COUNT(*)::int AS count FROM processed_scenes WHERE status = 'queued'");
+      if (rows[0].count >= POLL_QUEUE_BATCH_SIZE) {
+        console.log(`[poller] Queue at capacity (${rows[0].count} >= ${POLL_QUEUE_BATCH_SIZE}). Skipping global STAC discovery.`);
+        return;
+      }
+    } catch (err) {
+      console.warn('[poller] Failed to check queue capacity:', err.message);
+    }
+
+    _lastPollAt = new Date();
+    const now = _lastPollAt;
+
+    let state = null;
+    try {
+      state = await loadState();
+    } catch (_) {}
 
   let fromTime;
   if (state && state.last_scene_at) {
-    // Resume from last seen scene (+ 1 second to avoid re-fetching boundary)
     fromTime = new Date(new Date(state.last_scene_at).getTime() + 1000);
   } else {
-    // First run: look back INITIAL_LOOKBACK_HOURS
     fromTime = new Date(now.getTime() - INITIAL_LOOKBACK_HOURS * 3600 * 1000);
   }
 
-  // Sentinel Hub catalog accepts at most 24-hour windows per request
   const windowMs = Math.min(now - fromTime, 23 * 3600 * 1000);
   const toTime   = new Date(fromTime.getTime() + windowMs);
-
   const datetime = `${fromTime.toISOString()}/${toTime.toISOString()}`;
 
-  console.log(`[poller] Poll #${_pollCount + 1} | window: ${fromTime.toISOString()} → ${toTime.toISOString()} | AOI: ${AOI_BBOX}`);
+  console.log(`[poller] Poll #${_pollCount + 1} | window: ${fromTime.toISOString()} → ${toTime.toISOString()}`);
 
   let features = [];
   try {
     const catalog = await searchCatalog({
-      bbox: AOI_BBOX,
+      bbox: [-180, -90, 180, 90], // Satisfy CDSE STAC spatial requirement for global discovery
       datetime,
-      limit: BATCH_LIMIT,
       collections: ['sentinel-1-grd'],
     });
     features = catalog.features || [];
-    console.log(`[poller] CDSE returned ${features.length} scene(s)`);
+    console.log(`[poller] STAC discovered ${features.length} features globally`);
   } catch (err) {
     _lastError = err.message;
     console.error('[poller] CDSE catalog error:', err.message);
-    return; // Skip this cycle — will retry on next interval
+    return;
   }
 
-  // --- Deduplicate & enqueue ---
   let newScenes = 0;
   let latestAcquiredAt = null;
+  let validFeaturesCount = 0;
+  let invalidFeaturesCount = 0;
+  let discardedCount = 0;
+  let matchesCount = 0;
 
   for (const feature of features) {
-    const inserted = await enqueueScene(feature);
+    // 1. Read and validate original STAC bbox
+    const sceneBbox = feature.bbox;
+    if (!Array.isArray(sceneBbox) || sceneBbox.length !== 4 || !sceneBbox.every(Number.isFinite)) {
+      invalidFeaturesCount++;
+      continue;
+    }
+    validFeaturesCount++;
+
+    // 2. Track the latest acquisition time for ALL valid discovered scenes, 
+    // even if discarded, so the checkpoint advances over irrelevant scenes too.
+    const acq = feature.properties?.datetime || feature.properties?.start_datetime;
+    if (acq) {
+      const d = new Date(acq);
+      if (!latestAcquiredAt || d > latestAcquiredAt) latestAcquiredAt = d;
+    }
+
+    // 3. Find intersecting priority areas
+    const intersecting = PRIORITY_AREAS.filter(area => intersects(sceneBbox, area.bbox));
+    if (intersecting.length === 0) {
+      discardedCount++;
+      continue;
+    }
+    matchesCount++;
+
+    // 4. Select the highest priority area (first in the sorted list)
+    const selectedArea = intersecting[0];
+    if (intersecting.length > 1) {
+      console.log(`[poller] Scene ${feature.id} intersects ${intersecting.length} areas. Selected ${selectedArea.id}.`);
+    }
+
+    // 5. Enqueue with the selected acquisition bbox
+    const inserted = await enqueueScene(feature, selectedArea.bbox);
     if (inserted) {
       newScenes++;
-      // Track the latest acquisition time across all inserted scenes
-      const acq = feature.properties?.datetime || feature.properties?.start_datetime;
-      if (acq) {
-        const d = new Date(acq);
-        if (!latestAcquiredAt || d > latestAcquiredAt) latestAcquiredAt = d;
-      }
-      console.log(`[poller] Queued scene: ${feature.id}`);
+      console.log(`[poller] Queued scene: ${feature.id} for area: ${selectedArea.id}`);
     }
   }
 
-  if (newScenes === 0) {
-    console.log('[poller] No new scenes this cycle');
-  } else {
-    console.log(`[poller] ${newScenes} new scene(s) queued`);
-    _queuedTotal += newScenes;
-  }
+  console.log(`[poller] Poll summary: ${validFeaturesCount} valid, ${invalidFeaturesCount} invalid, ${matchesCount} matched, ${discardedCount} discarded, ${newScenes} queued`);
 
+  _queuedTotal += newScenes;
   _pollCount++;
   _lastError = null;
 
-  // Persist checkpoint
   await saveState({
     lastPollAt: now,
     lastSceneAt: latestAcquiredAt || toTime,
     pollCount: (state?.poll_count || 0) + 1,
     scenesQueued: (state?.scenes_queued || 0) + newScenes,
   });
+  } finally {
+    _inFlight = false;
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -269,7 +314,7 @@ async function start() {
     return;
   }
   _running = true;
-  console.log(`[poller] Starting — AOI=${AOI_BBOX} interval=${POLL_INTERVAL_MS}ms`);
+  console.log(`[poller] Starting — PRIORITY_AREAS=${PRIORITY_AREAS.length} (Global Discovery Mode) interval=${POLL_INTERVAL_MS}ms`);
 
   // Run immediately, then schedule repeating interval
   try {
@@ -313,13 +358,14 @@ function status() {
     queuedTotal: _queuedTotal,
     lastPollAt: _lastPollAt,
     lastError: _lastError,
+    inFlight: _inFlight,
     config: {
-      aoi: AOI_BBOX,
+      priorityAreas: PRIORITY_AREAS.map(a => a.id),
       intervalMs: POLL_INTERVAL_MS,
       initialLookbackHours: INITIAL_LOOKBACK_HOURS,
-      batchLimit: BATCH_LIMIT,
+      queueLimit: POLL_QUEUE_BATCH_SIZE,
     },
   };
 }
 
-module.exports = { start, stop, status, pollOnce, AOI_BBOX };
+module.exports = { start, stop, status, pollOnce, PRIORITY_AREAS };

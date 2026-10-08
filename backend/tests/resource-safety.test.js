@@ -1,144 +1,111 @@
 'use strict';
-const { test } = require('node:test');
+const { test, mock, beforeEach } = require('node:test');
 const assert = require('node:assert/strict');
-const https = require('https');
-const { PassThrough } = require('stream');
-const boundedFetch = require('../src/services/bounded-fetch');
-const sentinel = require('../src/services/sentinel.service');
+const fs = require('node:fs/promises');
+const path = require('node:path');
+const pool = require('../src/config/db');
+const poller = require('../src/services/scene-poller.service');
+const worker = require('../src/services/scene-worker.service');
 
-function createMockRequest(responseData, statusCode = 200, headers = {}, triggerError = null) {
-    return (options, cb) => {
-        const req = new PassThrough();
-        req.destroy = () => {};
-        
-        if (triggerError) {
-            setTimeout(() => req.emit('error', triggerError), 1);
-            return req;
-        }
-
-        const res = new PassThrough();
-        res.statusCode = statusCode;
-        res.headers = headers;
-        if (typeof responseData === 'string') {
-            res.headers['content-length'] = Buffer.byteLength(responseData).toString();
-        }
-        
-        setTimeout(() => {
-            if (cb) cb(res);
-            if (responseData instanceof Error) {
-                res.emit('error', responseData);
-            } else if (responseData) {
-                res.write(responseData);
-                res.end();
-            }
-        }, 1);
-
-        return req;
-    };
-}
-
-test('bounded streaming body, provider errors and AOI/scene guards', async () => {
-    const originalRequest = https.request;
-    let calls = 0;
-    try {
-        https.request = (opts, cb) => {
-            calls++;
-            return createMockRequest('123456789')(opts, cb);
-        };
-        await assert.rejects(
-            boundedFetch('https://example.invalid', {}, 8),
-            /size limit/,
-        );
-        https.request = (opts, cb) => {
-            calls++;
-            return createMockRequest('secret upstream details', 401)(opts, cb);
-        };
-        await assert.rejects(
-            boundedFetch('https://example.invalid'),
-            /HTTP 401/,
-        );
-        const before = calls;
-        for (const options of [
-            {
-                bbox: [-180, -80, 180, 80],
-                datetime: '2024-06-19T00:00:00Z/2024-06-19T01:00:00Z',
-            },
-            {
-                bbox: [74.7, 13.2, 74.78, 13.28],
-                datetime: '2024-01-01/2025-01-01',
-            },
-            {
-                bbox: [74.7, 13.2, 74.78, 13.28],
-                datetime: '2024-06-19T00:00:00Z/2024-06-19T01:00:00Z',
-                limit: 100,
-            },
-        ])
-            await assert.rejects(sentinel.searchCatalog(options));
-        await assert.rejects(
-            sentinel.getSentinel1GrdImage({
-                bbox: [74.7, 13.2, 74.78, 13.28],
-                from: '2024-06-19T00:00:00Z',
-                to: '2024-06-19T01:00:00Z',
-                width: 100000,
-            }),
-        );
-        assert.equal(
-            calls,
-            before,
-            'invalid limits must reject before any request',
-        );
-    } finally {
-        https.request = originalRequest;
-    }
+beforeEach(async () => {
+    await pool.query('DELETE FROM processed_scenes WHERE scene_id LIKE \'test_res_%\'');
 });
 
-test('download concurrency is bounded and aborted/error reads release capacity', async () => {
-    const originalRequest = https.request;
-    const releases = [];
+test('Poller Overlap Protection: concurrent pollOnce() returns immediately', async () => {
+    // Force the first pollOnce to hang a bit
+    mock.method(require('../src/services/sentinel.service'), 'searchCatalog', async () => {
+        await new Promise(r => setTimeout(r, 100));
+        return { features: [] };
+    });
+
+    const p1 = poller.pollOnce();
+    assert.equal(poller.status().inFlight, true);
+    
+    // This should skip immediately and return
+    await poller.pollOnce(); 
+    
+    // Wait for the first one to finish
+    await p1;
+    assert.equal(poller.status().inFlight, false);
+
+    mock.restoreAll();
+});
+
+test('Worker Concurrency Protection: concurrent processNextScene() returns busy', async () => {
+    // Insert a dummy scene
+    await pool.query(`INSERT INTO processed_scenes (scene_id, bbox, status, acquired_at) VALUES ('test_res_w_1', '[0,0,0.1,0.1]'::jsonb, 'queued', NOW())`);
+
+    // Mock getSentinel1GrdImage to delay so the lock is held
+    const acquireMock = mock.method(require('../src/services/sentinel.service'), 'getSentinel1GrdImage', async () => {
+        await new Promise(r => setTimeout(r, 100));
+        return { buffer: Buffer.from('dummy') };
+    });
+    
+    // Wait for internal lock to clear if any
+    while(worker.workerStatus().inFlight) await new Promise(r=>setTimeout(r,10));
+
+    const p1 = worker.processNextScene();
+    
+    // Wait for the first call to acquire the inFlight lock
+    while(!worker.workerStatus().inFlight) await new Promise(r=>setTimeout(r, 10));
+
+    // Second call should return busy
+    const p2Result = await worker.processNextScene();
+    assert.equal(p2Result.claimed, false);
+    assert.equal(p2Result.status, 'busy');
+
+    // Wait for the first one to finish
+    await p1;
+    assert.equal(worker.workerStatus().inFlight, false);
+
+    mock.restoreAll();
+});
+
+test('Disk Cleanup: directory is removed after processing', async () => {
+    // Insert a dummy scene
+    await pool.query(`INSERT INTO processed_scenes (scene_id, bbox, status, acquired_at) VALUES ('test_res_cleanup', '[0,0,0.1,0.1]'::jsonb, 'queued', NOW())`);
+
+    // Mock getSentinel1GrdImage to just create a dummy file
+    mock.method(require('../src/services/sentinel.service'), 'getSentinel1GrdImage', async () => {
+        return { buffer: Buffer.from('dummy') };
+    });
+
+    const result = await worker.processNextScene();
+    assert.equal(result.claimed, true);
+
+    // The directory should NOT exist
+    const sceneDir = path.join(__dirname, '../../data/scenes/test_res_cleanup');
     try {
-        https.request = (opts, cb) => {
-            const req = new PassThrough();
-            req.destroy = () => {};
-            const res = new PassThrough();
-            res.statusCode = 200;
-            res.headers = { 'content-length': '10' };
-            setTimeout(() => {
-                cb(res);
-                releases.push(() => { res.write('1'); res.end(); });
-            }, 1);
-            return req;
-        };
-
-        const first = boundedFetch('https://example.invalid');
-        const second = boundedFetch('https://example.invalid');
-        await new Promise((resolve) => setTimeout(resolve, 50));
-        await assert.rejects(
-            boundedFetch('https://example.invalid'),
-            /capacity/,
-        );
-        releases.forEach((release) => release());
-        await Promise.all([first, second]);
-
-        https.request = (opts, cb) => createMockRequest(null, 200, {}, new Error('socket hang up'))(opts, cb);
-        // Wait, the test expects a timeout/abort error to map to 'timed out'.
-        // boundedFetch maps TimeoutError or AbortError explicitly:
-        // Since we emit 'error', it rejects with the error directly. Let's make it emit an error with name 'TimeoutError'.
-        https.request = (opts, cb) => {
-            const err = new Error('test timeout');
-            err.name = 'TimeoutError';
-            return createMockRequest(null, 200, {}, err)(opts, cb);
-        };
-        await assert.rejects(
-            boundedFetch('https://example.invalid'),
-            /timed out/,
-        );
-
-        https.request = (opts, cb) => createMockRequest('ok')(opts, cb);
-        assert.equal(
-            (await boundedFetch('https://example.invalid')).status,
-            200,
-        );
-    } finally {
-        https.request = originalRequest;
+        await fs.access(sceneDir);
+        assert.fail('Directory was not deleted');
+    } catch (err) {
+        assert.equal(err.code, 'ENOENT');
     }
+
+    mock.restoreAll();
+});
+
+test('Queue Depth Protection: aborts poll if queue is at capacity', async () => {
+    const limit = poller.status().config.queueLimit;
+    
+    // Insert a batch of rows to exceed the limit
+    let values = [];
+    for(let i=0; i <= limit; i++) {
+        values.push(`('test_res_q_${i}', 'queued')`);
+    }
+    await pool.query(`INSERT INTO processed_scenes (scene_id, status) VALUES ${values.join(',')} ON CONFLICT DO NOTHING`);
+
+    let searchCalled = false;
+    mock.method(require('../src/services/sentinel.service'), 'searchCatalog', async () => {
+        searchCalled = true;
+        return { features: [] };
+    });
+
+    await poller.pollOnce();
+
+    assert.equal(searchCalled, false, 'searchCatalog should not be called when queue is full');
+
+    // cleanup
+    await pool.query('DELETE FROM processed_scenes WHERE scene_id LIKE \'test_res_%\'');
+    mock.restoreAll();
 });

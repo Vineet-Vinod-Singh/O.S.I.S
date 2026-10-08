@@ -52,9 +52,15 @@ function boundedFetch(urlStr, options = {}, maxBytes = limits.downloadBytes) {
             }
 
             if (res.statusCode < 200 || res.statusCode >= 300) {
-                cleanup();
-                req.destroy();
-                return reject(new Error(`CDSE access unavailable (HTTP ${res.statusCode}); check account permissions/quota`));
+                let errBody = '';
+                res.on('data', chunk => errBody += chunk);
+                res.on('end', () => {
+                    cleanup();
+                    req.destroy();
+                    console.error('CDSE HTTP ' + res.statusCode + ' error body:', errBody);
+                    return reject(new Error(`CDSE access unavailable (HTTP ${res.statusCode}); check account permissions/quota`));
+                });
+                return;
             }
 
             const contentLength = res.headers['content-length'];

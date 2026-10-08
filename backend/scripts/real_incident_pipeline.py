@@ -144,8 +144,12 @@ def _analyze(payload):
             centroid = report["spill"]["metrics"]["centroid"]
             environment.get_environment(centroid["lat"], centroid["lon"], timestamp(scene["acquiredAt"]))
             report["environment"] = environment.meta
-            report["provenance"]["environment"] = "REAL_REANALYSIS local current/wind; hashes and sampling limits in environment"
-            stage("environment", "completed", "REAL_REANALYSIS", "Both fields valid at detection; trajectory coverage checked on every RK4 sample")
+            if not getattr(environment, "has_wind", True):
+                report["provenance"]["environment"] = "REAL_REANALYSIS local current; wind intentionally disabled"
+                stage("environment", "completed", "REAL_REANALYSIS", "Current valid at detection; wind advection disabled/neutral. Trajectory coverage checked on every RK4 sample")
+            else:
+                report["provenance"]["environment"] = "REAL_REANALYSIS local current/wind; hashes and sampling limits in environment"
+                stage("environment", "completed", "REAL_REANALYSIS", "Both fields valid at detection; trajectory coverage checked on every RK4 sample")
             report["stages"].append("environment")
             for name, duration, backward in (("hindcast", hours, True), ("forecast", horizon, False)):
                 try:
@@ -162,6 +166,7 @@ def _analyze(payload):
                 except Unavailable as exc:
                     stage(name, "unavailable", "UNAVAILABLE", str(exc))
     except Unavailable as exc:
+        report["environment"] = {"status": "UNAVAILABLE"}
         stage("environment", "unavailable", "UNAVAILABLE", str(exc))
     if report["backward"]:
         origin = dict(report["backward"][-1])
@@ -173,8 +178,8 @@ def _analyze(payload):
         try:
             ais_mode = payload.get("ais_mode", "OFFLINE_REPLAY")
             if ais_mode == "LIVE":
-                raw_records = payload.get("live_ais_records", [])
-                if raw_records:
+                raw_records = payload.get("live_ais_records")
+                if raw_records is not None:
                     records, rejected = normalize_ais(raw_records)
                     vessels = [
                         {"mmsi": mmsi, "name": "Unknown", "type": "Unknown"}
@@ -187,7 +192,7 @@ def _analyze(payload):
                 else:
                     records, vessels, meta = [], [], {"source": "AIS_UNAVAILABLE", "kind": "NONE"}
                     report["ais"] = meta
-                    stage("ais", "unavailable", "LIVE", "Live AIS is unavailable or returned zero vessels")
+                    stage("ais", "unavailable", "LIVE", "Live AIS is unavailable or returned error")
                     report["provenance"]["ais"] = "LIVE real-time AISStream unavailable"
             else:
                 records, vessels, meta = historical_ais(origin, window, normalize_ais, timestamp)

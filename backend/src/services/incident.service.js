@@ -62,12 +62,12 @@ function runPipeline(input) {
             finish(
                 Object.assign(
                     new Error(
-                        'Analysis exceeded the 60 second processing limit',
+                        `Analysis exceeded the ${limits.requestMs / 1000} second processing limit`,
                     ),
                     { status: 504 },
                 ),
             );
-        }, 60000);
+        }, limits.requestMs);
         child.on('error', () =>
             finish(
                 Object.assign(
@@ -298,10 +298,10 @@ async function analyze(input = {}, trusted = null) {
                         }
                     } catch (err) {
                         console.error(`[incident ${id}] Live AIS query failed:`, err.message);
-                        pipelineInput.live_ais_records = [];
+                        pipelineInput.live_ais_records = null;
                     }
                 } else {
-                    pipelineInput.live_ais_records = [];
+                    pipelineInput.live_ais_records = null;
                 }
             }
         }
@@ -319,12 +319,20 @@ async function analyze(input = {}, trusted = null) {
             try {
                 const pool = require('../config/db');
                 report.persistence.database = 'mirrored';
-                await pool.query(
-                    `INSERT INTO osis_incidents(id, detected_at, image_at, spill_geom, origin_geom, report)
-           VALUES ($1,$2,$3,ST_SetSRID(ST_GeomFromGeoJSON($4),4326),
-                   ST_SetSRID(ST_GeomFromGeoJSON($5),4326),$6::jsonb)`,
+                const pgResult = await pool.query(
+                    `INSERT INTO osis_incidents(id, scene_id, detected_at, image_at, spill_geom, origin_geom, report)
+           VALUES ($1,$2,$3,$4,ST_SetSRID(ST_GeomFromGeoJSON($5),4326),
+                   ST_SetSRID(ST_GeomFromGeoJSON($6),4326),$7::jsonb)
+           ON CONFLICT (scene_id) DO UPDATE SET 
+               detected_at = EXCLUDED.detected_at, 
+               image_at = EXCLUDED.image_at, 
+               spill_geom = EXCLUDED.spill_geom, 
+               origin_geom = EXCLUDED.origin_geom, 
+               report = EXCLUDED.report
+           RETURNING id`,
                     [
                         id,
+                        sceneId,
                         report.detectedAt,
                         report.scene.acquiredAt || null,
                         report.spill
@@ -336,7 +344,11 @@ async function analyze(input = {}, trusted = null) {
                         JSON.stringify(report),
                     ],
                 );
-            } catch {
+                if (pgResult.rows.length > 0) {
+                    report.id = pgResult.rows[0].id;
+                }
+            } catch (err) {
+                console.error(`[incident ${id}] Database Error:`, err);
                 report.persistence.database = 'unavailable_local_fallback';
                 console.warn(
                     `[incident ${id}] database mirror unavailable; retaining local report`,

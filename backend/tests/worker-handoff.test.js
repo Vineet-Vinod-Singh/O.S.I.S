@@ -62,7 +62,7 @@ test('worker handoff passes acquisitionBbox as scene bbox and preserves full STA
   capturedTrusted = null;
   scenes.clear();
   
-  const aoi = poller.AOI_BBOX; // [minLon, minLat, maxLon, maxLat]
+  const aoi = poller.PRIORITY_AREAS && poller.PRIORITY_AREAS.length > 0 ? poller.PRIORITY_AREAS[0].bbox : [70.0, 15.0, 70.2, 15.2]; // [minLon, minLat, maxLon, maxLat]
   // Create a full CDSE scene footprint that is larger than the AOI
   const fullStacBbox = [
     aoi[0] - 1.0,
@@ -83,7 +83,7 @@ test('worker handoff passes acquisitionBbox as scene bbox and preserves full STA
     polarization: ['VV', 'VH'],
     platform: 'S1A',
     orbit_direction: 'ASCENDING',
-    stac_feature: null
+    stac_feature: JSON.stringify({ bbox: fullStacBbox })
   });
 
   const result = await worker.processSceneById(100);
@@ -102,7 +102,7 @@ test('TEST A: October 5 scene gets environment override in worker handoff', asyn
   capturedTrusted = null;
   scenes.clear();
   
-  const aoi = poller.AOI_BBOX;
+  const aoi = poller.PRIORITY_AREAS && poller.PRIORITY_AREAS.length > 0 ? poller.PRIORITY_AREAS[0].bbox : [70.0, 15.0, 70.2, 15.2];
   const fullStacBbox = [aoi[0] - 1.0, aoi[1] - 1.0, aoi[2] + 1.0, aoi[3] + 1.0];
   
   scenes.set(101, {
@@ -133,7 +133,7 @@ test('TEST A2: Scene-specific environment override is applied for Oman scene', a
   capturedTrusted = null;
   scenes.clear();
   
-  const aoi = poller.AOI_BBOX;
+  const aoi = poller.PRIORITY_AREAS && poller.PRIORITY_AREAS.length > 0 ? poller.PRIORITY_AREAS[0].bbox : [70.0, 15.0, 70.2, 15.2];
   
   scenes.set(105, {
     id: 105,
@@ -160,7 +160,7 @@ test('TEST B: No override is added for an ordinary scene (Karnataka)', async () 
   capturedTrusted = null;
   scenes.clear();
   
-  const aoi = poller.AOI_BBOX;
+  const aoi = poller.PRIORITY_AREAS && poller.PRIORITY_AREAS.length > 0 ? poller.PRIORITY_AREAS[0].bbox : [70.0, 15.0, 70.2, 15.2];
   const fullStacBbox = [aoi[0] - 1.0, aoi[1] - 1.0, aoi[2] + 1.0, aoi[3] + 1.0];
   
   scenes.set(102, {

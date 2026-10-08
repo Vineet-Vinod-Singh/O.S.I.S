@@ -179,6 +179,42 @@ class RealPipelineTests(unittest.TestCase):
         self.assertEqual(records_passed[1]["timestamp"], "2024-06-18T18:00:00Z")
         self.assertEqual(records_passed[2]["timestamp"], "2024-06-18T19:00:00Z")
 
+    def test_environment_current_and_wind_available(self):
+        class Environment:
+            has_wind = True
+            meta = {"source": "test_double"}
+            def get_environment(self, *args):
+                return {}
+            def close(self):
+                pass
+        with patch.object(p, "run_sar", return_value=self.sar), patch.object(p, "StrictEnvironmentProvider", return_value=Environment()), patch.object(p, "drift", return_value=[]):
+            r = p.analyze(self.payload)
+        self.assertEqual(r["stageStatus"]["environment"]["status"], "completed")
+        self.assertIn("current/wind", r["provenance"]["environment"])
+        self.assertEqual(r["evidenceProvenance"]["environment"]["kind"], "MODELED")
+
+    def test_environment_wind_intentionally_disabled(self):
+        class Environment:
+            has_wind = False
+            meta = {"source": "test_double", "wind_status": "intentionally unavailable"}
+            def get_environment(self, *args):
+                return {}
+            def close(self):
+                pass
+        with patch.object(p, "run_sar", return_value=self.sar), patch.object(p, "StrictEnvironmentProvider", return_value=Environment()), patch.object(p, "drift", return_value=[]):
+            r = p.analyze(self.payload)
+        self.assertEqual(r["stageStatus"]["environment"]["status"], "completed")
+        self.assertIn("wind intentionally disabled", r["provenance"]["environment"])
+        self.assertIn("wind advection disabled/neutral", r["stageStatus"]["environment"]["reason"])
+        self.assertEqual(r["evidenceProvenance"]["environment"]["kind"], "MODELED")
+
+    def test_environment_genuinely_unavailable(self):
+        with patch.object(p, "run_sar", return_value=self.sar), patch.object(p, "StrictEnvironmentProvider", side_effect=Unavailable("No NetCDF")):
+            r = p.analyze(self.payload)
+        self.assertEqual(r["stageStatus"]["environment"]["status"], "unavailable")
+        self.assertEqual(r["environment"]["status"], "UNAVAILABLE")
+        self.assertEqual(r["evidenceProvenance"]["environment"]["kind"], "UNAVAILABLE")
+
 
 if __name__ == "__main__":
     unittest.main()

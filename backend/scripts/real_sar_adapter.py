@@ -93,9 +93,22 @@ class ExperimentalSpillDetector:
             land = pose["predMask"] == 4
             has_land = land.sum() > 50
             distance = m.cv2.distanceTransform((~land).astype(np.uint8), m.cv2.DIST_L2, 5) if has_land else np.full(vv.shape, 9999, np.float32)
+            
+            try:
+                from global_land_mask import globe
+                min_lon, min_lat, max_lon, max_lat = scene["bbox"]
+                rxs = np.arange(512)
+                rys = np.arange(512)
+                lons = min_lon + (rxs + 0.5) * (max_lon - min_lon) / 512.0
+                lats = max_lat - (rys + 0.5) * (max_lat - min_lat) / 512.0
+                lon_grid, lat_grid = np.meshgrid(lons, lats)
+                geo_land_mask = globe.is_land(lat_grid, lon_grid)
+            except ImportError:
+                geo_land_mask = None
+
             retained = []
             for candidate in classical["retainedCandidates"]:
-                fusion = m.fuse_evidence(candidate, pose, distance, has_land)
+                fusion = m.fuse_evidence(candidate, pose, distance, has_land, geo_land_mask)
                 if fusion["fusedScore"] >= m.FUSION_CONFIG["fusionWeights"]["decisionThreshold"]:
                     retained.append(dict(candidate, fusion=fusion))
             objects = m.merge_candidates_to_spill_objects(retained, pose, scene["bbox"], include_masks=True)

@@ -287,38 +287,46 @@ async function ensureSceneDir(sceneId) {
 async function acquireScene(scene) {
   const { scene_id, bbox: bboxRaw, acquired_at, stac_feature } = scene;
 
-  // --- Resolve bbox ---
-  // bbox column is JSONB stored as [minLon,minLat,maxLon,maxLat]
-  let bbox = bboxRaw;
-  if (!Array.isArray(bbox) && stac_feature) {
-    // Fallback: parse from raw STAC feature
-    const feat = typeof stac_feature === 'string' ? JSON.parse(stac_feature) : stac_feature;
-    bbox = feat.bbox || null;
+  // --- Resolve bboxes ---
+  // The DB 'bbox' field now stores the selected <=0.2° acquisition bbox (from poller)
+  let acquisitionBbox = bboxRaw;
+  if (!Array.isArray(acquisitionBbox) && typeof acquisitionBbox === 'string') {
+      try { acquisitionBbox = JSON.parse(acquisitionBbox); } catch(e) {}
   }
-  if (!Array.isArray(bbox) || bbox.length !== 4 || !bbox.every(Number.isFinite)) {
-    throw new Error(`Scene ${scene_id}: no valid bbox available for acquisition`);
+
+  const feat = typeof stac_feature === 'string' ? JSON.parse(stac_feature) : (stac_feature || {});
+  const fullSceneBbox = feat.bbox;
+
+  if (!Array.isArray(acquisitionBbox) || acquisitionBbox.length !== 4) {
+    throw new Error(`Scene ${scene_id}: no valid acquisition bbox available`);
+  }
+
+  // Backwards compatibility for scenes queued before Priority Areas step:
+  // If the DB bbox is the full >0.2° scene footprint, we must fall back to a priority area.
+  if (acquisitionBbox[2] - acquisitionBbox[0] > 0.21 || acquisitionBbox[3] - acquisitionBbox[1] > 0.21) {
+    if (poller.PRIORITY_AREAS && poller.PRIORITY_AREAS.length > 0) {
+        acquisitionBbox = poller.PRIORITY_AREAS[0].bbox;
+    } else {
+        throw new Error(`Scene ${scene_id}: Old full-scene bbox requires a fallback Priority Area, but none are configured.`);
+    }
   }
 
   // --- Verify AOI containment ---
-  const [sceneMinLon, sceneMinLat, sceneMaxLon, sceneMaxLat] = bbox;
-  const [aoiMinLon, aoiMinLat, aoiMaxLon, aoiMaxLat] = poller.AOI_BBOX;
+  // Verify that the selected acquisitionBbox is actually within the fullSceneBbox
+  if (Array.isArray(fullSceneBbox) && fullSceneBbox.length === 4) {
+      const [sceneMinLon, sceneMinLat, sceneMaxLon, sceneMaxLat] = fullSceneBbox;
+      const [aoiMinLon, aoiMinLat, aoiMaxLon, aoiMaxLat] = acquisitionBbox;
 
-  // We require the configured AOI to be strictly within the scene footprint.
-  // CDSE raster subsetting may fail if the requested bounding box extends beyond the available image data.
-  // Allow a tiny floating point epsilon (0.0001 degrees) just in case.
-  const eps = 0.0001;
-  if (
-    aoiMinLon < sceneMinLon - eps ||
-    aoiMaxLon > sceneMaxLon + eps ||
-    aoiMinLat < sceneMinLat - eps ||
-    aoiMaxLat > sceneMaxLat + eps
-  ) {
-    throw new Error(`Scene ${scene_id}: Configured AOI [${poller.AOI_BBOX.join(',')}] is not within the scene footprint [${bbox.join(',')}]`);
+      const eps = 0.0001;
+      if (
+        aoiMinLon < sceneMinLon - eps ||
+        aoiMaxLon > sceneMaxLon + eps ||
+        aoiMinLat < sceneMinLat - eps ||
+        aoiMaxLat > sceneMaxLat + eps
+      ) {
+        throw new Error(`Scene ${scene_id}: Acquisition bbox [${acquisitionBbox.join(',')}] is not within the scene footprint [${fullSceneBbox.join(',')}]`);
+      }
   }
-
-  // The actual raster acquisition request MUST use the configured OSIS acquisition AOI,
-  // NOT the full Sentinel-1 scene footprint (which is too large and would fail validateSubset).
-  const acquisitionBbox = poller.AOI_BBOX;
 
   // --- Resolve acquisition timestamp ---
   if (!acquired_at) {
@@ -371,7 +379,7 @@ async function acquireScene(scene) {
     sceneDir,
     paths,
     tiffMeta,
-    bbox, // Full CDSE scene footprint
+    bbox: fullSceneBbox, // Full CDSE scene footprint
     acquisitionBbox, // Sub-setting AOI used for raster download
     acquiredAt: fromTime,
     downloadedAt: new Date().toISOString(),
@@ -390,6 +398,8 @@ async function acquireScene(scene) {
  * @returns {Promise<{claimed: boolean, sceneId?: string, status: string, error?: string}>}
  */
 async function processNextScene() {
+  if (_inFlight) return { claimed: false, status: 'busy' };
+  _inFlight = true;
   try {
     const scene = await claimNextScene();
     if (!scene) {
@@ -398,21 +408,29 @@ async function processNextScene() {
     return await processClaimedScene(scene);
   } catch (err) {
     return handleClaimFailure(err);
+  } finally {
+    _inFlight = false;
   }
 }
 
 /** Process one specific queued scene through the standard pipeline. */
 async function processSceneById(id) {
+  if (_inFlight) return { claimed: false, status: 'busy' };
+  _inFlight = true;
   try {
     const scene = await claimSceneById(id);
     if (!scene) return { claimed: false, status: 'not_queued' };
     return await processClaimedScene(scene);
   } catch (err) {
     return handleClaimFailure(err);
+  } finally {
+    _inFlight = false;
   }
 }
 
 async function processClaimedScene(scene) {
+  const safeId = String(scene.scene_id).replace(/[^A-Za-z0-9._-]/g, '_').slice(0, 200);
+  const sceneDir = path.join(SCENES_DIR, safeId);
   try {
     console.log(`[worker] Claimed scene: ${scene.scene_id} (id=${scene.id})`);
     _lastActivity = new Date();
@@ -504,6 +522,12 @@ async function processClaimedScene(scene) {
       console.error('[worker] Could not write failure to DB:', String(dbErr.message).slice(0, 200));
     }
     return { claimed: true, sceneId: scene.scene_id, status: 'failed', error: safeMsg };
+  } finally {
+    try {
+      await fs.rm(sceneDir, { recursive: true, force: true });
+    } catch (cleanupErr) {
+      console.error(`[worker] Failed to cleanup scene directory ${sceneDir}:`, cleanupErr.message);
+    }
   }
 }
 
@@ -565,7 +589,6 @@ async function _tick() {
     console.log('[worker] Previous cycle still running — skipping tick');
     return;
   }
-  _inFlight = true;
   try {
     try {
       const { recovered, failed } = await recoverStaleScenes();
@@ -580,8 +603,6 @@ async function _tick() {
   } catch (err) {
     _lastError = String(err.message || 'tick error');
     console.error('[worker] Unhandled tick error:', _lastError);
-  } finally {
-    _inFlight = false;
   }
 }
 

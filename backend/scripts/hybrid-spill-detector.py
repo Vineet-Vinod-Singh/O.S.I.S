@@ -109,6 +109,9 @@ FUSION_CONFIG = {
         "landArtifactFilter": {
             "maxLandOverlapAllowed": 0.40          # Reject candidate if >40% overlaps land
         },
+        "geographicLandFilter": {
+            "maxGeoLandFraction": 0.50             # Reject if >50% pixels are geographically on land
+        },
         "decisionThreshold": 0.50                  # Fused score threshold for positive detection
     }
 }
@@ -416,7 +419,7 @@ def run_poseatsea_inference(model, device, vv_db, vh_db, valid_mask):
 # 4. HYBRID FUSION LAYER
 # ==============================================================================
 
-def fuse_evidence(candidate, pose_res, dist_to_land, has_land):
+def fuse_evidence(candidate, pose_res, dist_to_land, has_land, geo_land_mask=None):
     """
     Evaluates transparent multi-criteria evidence fusion for a single classical candidate.
     """
@@ -424,6 +427,14 @@ def fuse_evidence(candidate, pose_res, dist_to_land, has_land):
     area = candidate["area"]
     c_score = candidate["heuristicScore"]
     vv_damp = candidate["vvDampingDb"]
+
+    if cmask.size == 0 or area == 0:
+        return {
+            "fusedScore": 0.0,
+            "rule": "degenerate_candidate",
+            "evidence": {},
+            "decisionPath": "Rejected: candidate has 0 area or malformed size."
+        }
 
     probs = pose_res["probs"]
     pred_mask = pose_res["predMask"]
@@ -440,6 +451,7 @@ def fuse_evidence(candidate, pose_res, dist_to_land, has_land):
     mean_p_la = float(probs[2][cmask].mean())
     la_overlap = float((pred_mask[cmask] == 2).sum()) / float(area)
     land_overlap = float((pred_mask[cmask] == 4).sum()) / float(area)
+    geo_land_overlap = float(geo_land_mask[cmask].sum()) / float(area) if geo_land_mask is not None else 0.0
 
     # Dynamic Coastal Proximity
     cand_dist_land = float(dist_to_land[cmask].min()) if has_land else 9999.0
@@ -453,10 +465,15 @@ def fuse_evidence(candidate, pose_res, dist_to_land, has_land):
     w_cfg = FUSION_CONFIG["fusionWeights"]
 
     # Rule evaluation
-    if land_overlap > w_cfg["landArtifactFilter"]["maxLandOverlapAllowed"]:
+    if geo_land_overlap > w_cfg["geographicLandFilter"]["maxGeoLandFraction"]:
+        fused_score = 0.0
+        rule = "geographic_land_rejected"
+        decision_path = f"Rejected: {geo_land_overlap*100:.1f}% candidate area is geographically on land (Globe mask)."
+
+    elif land_overlap > w_cfg["landArtifactFilter"]["maxLandOverlapAllowed"]:
         fused_score = 0.0
         rule = "land_artifact_rejected"
-        decision_path = f"Rejected: {land_overlap*100:.1f}% candidate area overlaps Land mask."
+        decision_path = f"Rejected: {land_overlap*100:.1f}% candidate area overlaps POSEatSea Land prediction."
 
     elif coastal_prox > w_cfg["coastal"]["coastalProximityThreshold"]:
         # Coastal slick handling: POSEatSea misclassifies genuine coastal oil as look-alike.
@@ -505,6 +522,7 @@ def fuse_evidence(candidate, pose_res, dist_to_land, has_land):
             "oilOverlapRatio": round(oil_overlap, 3),
             "lookalikeOverlapRatio": round(la_overlap, 3),
             "landOverlapRatio": round(land_overlap, 3),
+            "geoLandFraction": round(geo_land_overlap, 3),
             "vvDampingDb": candidate["vvDampingDb"],
             "vvVhDifferenceDb": candidate["vvVhDifferenceDb"],
             "coastalProximity": round(coastal_prox, 3),
