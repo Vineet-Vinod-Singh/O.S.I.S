@@ -160,7 +160,7 @@ export function IncidentProvider({ children }: { children: ReactNode }) {
       setActiveReport,
       setActiveReportId,
       clearActiveReport,
-      history: historyData ?? [],
+      history: (historyData ?? []).filter(r => !r.sceneId?.startsWith('test_')),
       historyLoading,
       historyError: historyError ?? null,
       refetchHistory: () => void refetchHistory(),

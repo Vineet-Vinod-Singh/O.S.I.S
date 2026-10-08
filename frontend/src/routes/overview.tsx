@@ -135,7 +135,7 @@ function OverviewDashboard() {
       status: spill ? ("completed" as const) : isNoSpill ? ("completed" as const) : ("inconclusive" as const),
       statusBadge: spill ? "Completed" : isNoSpill ? "Clean (Completed)" : "Inconclusive",
       result: spill
-        ? `Candidate spill identified (${spill.metrics.areaKm2} km², ${(spill.confidence * 100).toFixed(0)}% confidence)`
+        ? `Candidate spill identified (${(spill.maskAreaKm2 ?? spill.metrics.areaKm2)} km², ${(spill.confidence * 100).toFixed(0)}% confidence)`
         : isNoSpill
           ? "No dark-slick detected above backscatter threshold"
           : "SAR imagery classification inconclusive",
@@ -153,7 +153,7 @@ function OverviewDashboard() {
             : ("unavailable" as const),
       statusBadge: origin ? "Completed" : hasDrift ? (report.stageStatus?.["forecast"]?.status === "partial" ? "Partial" : "Completed") : isNoSpill ? "Not Assessed" : "Unavailable",
       result: origin
-        ? `Origin region computed at ${origin.lat.toFixed(3)}°N, ${origin.lon.toFixed(3)}°E (±${origin.uncertaintyKm} km)`
+        ? `${report.hindcastHours || 6}h Hindcast → Origin → ${report.forecastHours || 24}h Forecast (±${origin.uncertaintyKm} km)`
         : hasDrift
           ? (report.stageStatus?.["forecast"]?.status === "partial" ? (report.stageStatus?.["forecast"]?.reason || "Trajectory truncated: reached land or data boundary") : `Drift trajectory computed (${driftPath.length} steps)`)
           : isNoSpill
@@ -168,14 +168,18 @@ function OverviewDashboard() {
         ? ("completed" as const)
         : isNoSpill
           ? ("not_assessed" as const)
-          : ("incomplete" as const),
-      statusBadge: candidates.length > 0 ? "Completed" : isNoSpill ? "Not Assessed" : "No Candidates",
+          : report?.stageStatus?.["ais"]?.status === "unavailable"
+            ? ("unavailable" as const)
+            : ("incomplete" as const),
+      statusBadge: candidates.length > 0 ? "Completed" : isNoSpill ? "Not Assessed" : report?.stageStatus?.["ais"]?.status === "unavailable" ? "Unavailable" : "No Candidates",
       result:
         candidates.length > 0
           ? `${candidates.length} candidate vessel${candidates.length !== 1 ? "s" : ""} correlated with release corridor`
           : isNoSpill
             ? "Vessel correlation skipped — clean sea surface"
-            : "No compatible vessels found within spatio-temporal window",
+            : report?.stageStatus?.["ais"]?.status === "unavailable"
+              ? "Historical AIS observations are unavailable for this replay period."
+              : "No compatible vessels found within spatio-temporal window",
     },
     {
       stage: "Attribution",
@@ -191,7 +195,9 @@ function OverviewDashboard() {
         ? `Leading source candidate: ${topCandidate.name} (Score: ${topCandidate.score}/100)`
         : isNoSpill
           ? "Attribution not required"
-          : "Source attribution inconclusive from current evidence",
+          : report?.stageStatus?.["ais"]?.status === "unavailable"
+            ? "Vessel attribution cannot be established from the available evidence."
+            : "Source attribution inconclusive from current evidence",
     },
   ];
 
@@ -199,7 +205,7 @@ function OverviewDashboard() {
   const kpis = [
     {
       label: "Spill Area",
-      value: spill ? `${spill.metrics.areaKm2} km²` : isNoSpill ? "Clean" : "—",
+      value: spill ? `${(spill.maskAreaKm2 ?? spill.metrics.areaKm2)} km²` : isNoSpill ? "Clean" : "—",
       detail: spill ? `${spill.metrics.lengthM.toFixed(0)}m × ${spill.metrics.widthM.toFixed(0)}m` : "SAR segmentation",
       color: "var(--accent-blue)",
     },

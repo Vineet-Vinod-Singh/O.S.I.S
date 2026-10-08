@@ -45,6 +45,36 @@ class TestSceneEnvironmentSelection(unittest.TestCase):
     @patch("real_incident_pipeline.StrictEnvironmentProvider")
     @patch("real_incident_pipeline.run_sar")
     @patch("real_incident_pipeline.load_scene")
+    def test_oman_environment(self, mock_load, mock_run_sar, MockProvider):
+        scene = {
+            "id": "S1D_IW_GRDH_1SDV_20260702T142203_20260702T142232_003496_0062F7_DBD7_COG.SAFE",
+            "acquiredAt": "2026-07-02T14:22:03Z",
+            "bbox": [56.24, 17.40, 56.43, 17.59],
+            "environment": {
+                "current": "environment/oman/cmems_oman_20260702.nc",
+                "wind": "environment/oman/era5_oman_20260702.nc"
+            }
+        }
+        mock_load.return_value = (scene, {})
+        mock_run_sar.return_value = {
+            "scene": scene, 
+            "mask": [], 
+            "detector": {"name": "test_double"},
+            "detections": [{"passesOilEvidenceGate": True, "metrics": {"centroid": {"lat": 17.50, "lon": 56.34}}}]
+        }
+
+        mock_env_instance = MockProvider.return_value
+        mock_env_instance.meta = {"source": "test_mock"}
+
+        p.analyze(self.payload)
+
+        expected_current = str((p.ROOT / "data" / "environment/oman/cmems_oman_20260702.nc").resolve())
+        expected_wind = str((p.ROOT / "data" / "environment/oman/era5_oman_20260702.nc").resolve())
+        MockProvider.assert_called_once_with(current_path=expected_current, wind_path=expected_wind)
+
+    @patch("real_incident_pipeline.StrictEnvironmentProvider")
+    @patch("real_incident_pipeline.run_sar")
+    @patch("real_incident_pipeline.load_scene")
     def test_legacy_fallback_environment(self, mock_load, mock_run_sar, MockProvider):
         # TEST 2: scene with no environment override
         scene = {

@@ -439,6 +439,10 @@ async function processClaimedScene(scene) {
       const SCENE_ENVIRONMENT_OVERRIDES = {
         'S1D_IW_GRDH_1SDV_20261005T011017_20261005T011042_004873_0092A1_0488_COG.SAFE': {
           current: 'environment/arabian_sea/cmems_arabian_sea_20261005.nc'
+        },
+        'S1D_IW_GRDH_1SDV_20260702T142203_20260702T142232_003496_0062F7_DBD7_COG.SAFE': {
+          current: 'environment/oman/cmems_oman_20260702.nc',
+          wind: 'environment/oman/era5_oman_20260702.nc'
         }
       };
       const envOverride = SCENE_ENVIRONMENT_OVERRIDES[scene.scene_id];

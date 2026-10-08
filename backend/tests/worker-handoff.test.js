@@ -129,6 +129,33 @@ test('TEST A: October 5 scene gets environment override in worker handoff', asyn
   assert.equal(env.wind, undefined, 'wind override must not be present');
 });
 
+test('TEST A2: Scene-specific environment override is applied for Oman scene', async () => {
+  capturedTrusted = null;
+  scenes.clear();
+  
+  const aoi = poller.AOI_BBOX;
+  
+  scenes.set(105, {
+    id: 105,
+    scene_id: 'S1D_IW_GRDH_1SDV_20260702T142203_20260702T142232_003496_0062F7_DBD7_COG.SAFE',
+    collection: 'sentinel-1-grd',
+    acquired_at: '2026-07-02T14:22:03Z',
+    bbox: [aoi[0] - 1.0, aoi[1] - 1.0, aoi[2] + 1.0, aoi[3] + 1.0],
+    status: 'queued',
+    polarization: ['VV', 'VH']
+  });
+  
+  const result = await worker.processSceneById(105);
+  assert.equal(result.claimed, true);
+  assert.equal(result.status, 'completed');
+  
+  assert.ok(capturedTrusted, 'Pipeline handoff was not called');
+  const env = capturedTrusted._scene.environment;
+  assert.ok(env, 'environment override must be present for Oman scene');
+  assert.equal(env.current, 'environment/oman/cmems_oman_20260702.nc');
+  assert.equal(env.wind, 'environment/oman/era5_oman_20260702.nc');
+});
+
 test('TEST B: No override is added for an ordinary scene (Karnataka)', async () => {
   capturedTrusted = null;
   scenes.clear();

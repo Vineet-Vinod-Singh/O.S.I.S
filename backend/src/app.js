@@ -36,15 +36,15 @@ app.use('/api/ingestion', ingestionRoutes);
 // DAY 2 — scene acquisition worker
 app.use('/api/worker', workerRoutes);
 
-// Auto-start the scene poller on boot when POLLER_AUTOSTART=true
-if (process.env.POLLER_AUTOSTART === 'true') {
+const autoStartPoller = process.env.POLLER_AUTOSTART === 'true' || process.env.npm_lifecycle_event === 'start';
+if (autoStartPoller) {
   scenePoller.start().catch(err =>
     console.error('[app] Scene poller auto-start failed:', err.message)
   );
 }
 
-// Auto-start the acquisition worker on boot only when OSIS_WORKER_AUTOSTART=true
-if (process.env.OSIS_WORKER_AUTOSTART === 'true') {
+const autoStartWorker = process.env.OSIS_WORKER_AUTOSTART === 'true' || process.env.npm_lifecycle_event === 'start';
+if (autoStartWorker) {
   sceneWorker.startWorker().catch(err =>
     console.error('[app] Scene worker auto-start failed:', err.message)
   );

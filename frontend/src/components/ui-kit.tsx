@@ -155,7 +155,7 @@ export function OutcomeBadge({ outcome }: { outcome?: string | null }) {
     return (
       <div className="inline-flex items-center gap-2 rounded-md border border-rose-500/40 bg-rose-500/10 px-2.5 py-1 text-xs font-mono font-semibold text-rose-400">
         <span className="h-1.5 w-1.5 rounded-full bg-rose-500 om-pulse-dot" />
-        SPILL DETECTED
+        OIL-LIKE SIGNATURE DETECTED
       </div>
     );
   }

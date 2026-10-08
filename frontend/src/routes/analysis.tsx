@@ -114,13 +114,13 @@ function InvestigationReport({ report }: { report: IncidentReport }) {
 
   // Assessment label
   const assessmentLabel = outcome === "SPILL_DETECTED" && topCandidate
-    ? "CANDIDATE SOURCE IDENTIFIED"
+    ? "OIL-LIKE SIGNATURE WITH CANDIDATE SOURCE"
     : outcome === "NO_SPILL_DETECTED"
       ? "NO SPILL DETECTED"
       : outcome === "ANALYSIS_INCONCLUSIVE"
         ? "ANALYSIS INCONCLUSIVE"
         : outcome === "SPILL_DETECTED"
-          ? "SPILL DETECTED (INVESTIGATION PARTIAL)"
+          ? "OIL-LIKE SIGNATURE DETECTED (INVESTIGATION PARTIAL)"
           : "INVESTIGATION COMPLETE";
 
   const assessmentColor = outcome === "SPILL_DETECTED"
@@ -215,12 +215,18 @@ function InvestigationReport({ report }: { report: IncidentReport }) {
       {/* 2. KEY FINDINGS */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
         <div className="rounded border border-border bg-card p-3 space-y-1">
-          <span className="text-[10px] uppercase text-muted-foreground tracking-wider font-mono block">Spill Detected</span>
-          <span className="text-sm font-bold text-foreground font-mono">{spill ? "Yes" : "No"}</span>
+          <span className="text-[10px] uppercase text-muted-foreground tracking-wider font-mono block">Signature</span>
+          <span className="text-xs font-bold text-foreground font-mono">{spill ? "Oil-Like Inferred" : "No Signature"}</span>
+          {spill && (
+            <span className="text-[9px] text-muted-foreground block mt-0.5 leading-tight">
+              Experimental {report?.detector?.name ?? "hybrid"} detector<br/>
+              Confidence: ~{(spill.confidence * 100).toFixed(1)}%
+            </span>
+          )}
         </div>
         <div className="rounded border border-border bg-card p-3 space-y-1">
           <span className="text-[10px] uppercase text-muted-foreground tracking-wider font-mono block">Spill Area</span>
-          <span className="text-sm font-bold text-foreground font-mono tabular-nums">{spill ? `${spill.metrics.areaKm2} km²` : "—"}</span>
+          <span className="text-sm font-bold text-foreground font-mono tabular-nums">{spill ? `${(spill.maskAreaKm2 ?? spill.metrics.areaKm2)} km²` : "—"}</span>
         </div>
         <div className="rounded border border-border bg-card p-3 space-y-1">
           <span className="text-[10px] uppercase text-muted-foreground tracking-wider font-mono block" title="Approximate interval based on available observations">Est. Observation Age</span>

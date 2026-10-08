@@ -227,6 +227,11 @@ function IncidentSelector() {
                       <span>{outcomeLabel}</span>
                       <span>{latest.detectedAt.slice(0, 16).replace("T", " ")}</span>
                     </div>
+                    {latest.sceneId && (
+                      <div className="mt-1 text-[9px] font-mono text-muted-foreground truncate opacity-70" title={latest.sceneId}>
+                        {latest.sceneId}
+                      </div>
+                    )}
                     {items.length > 1 && (
                       <div className="text-[9px] text-muted-foreground/70 mt-0.5">
                         +{items.length - 1} older report{items.length > 2 ? "s" : ""}

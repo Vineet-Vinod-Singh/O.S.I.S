@@ -220,7 +220,7 @@ async function pollOnce() {
 
   // --- Deduplicate & enqueue ---
   let newScenes = 0;
-  let latestAcquiredAt = state?.last_scene_at ? new Date(state.last_scene_at) : null;
+  let latestAcquiredAt = null;
 
   for (const feature of features) {
     const inserted = await enqueueScene(feature);

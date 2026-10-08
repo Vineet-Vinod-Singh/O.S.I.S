@@ -249,7 +249,7 @@ function SatellitePage() {
             </div>
             <p className="text-xs text-muted-foreground max-w-3xl">
               {isSpillDetected
-                ? `Sentinel-1 SAR backscatter analysis resolved a distinct low-backscatter dark anomaly measuring ${spill.metrics.areaKm2} km² with ${(spill.confidence * 100).toFixed(0)}% algorithmic confidence.`
+                ? `Sentinel-1 SAR backscatter analysis resolved a distinct low-backscatter dark anomaly measuring ${(spill.maskAreaKm2 ?? spill.metrics.areaKm2)} km² with ${(spill.confidence * 100).toFixed(0)}% algorithmic confidence.`
                 : isNoSpill
                   ? "Sentinel-1 SAR scene backscatter analysis verified normal oceanic capillary wave roughness with no anomalous dark slicks meeting threshold criteria."
                   : report.outcomeMessage ||
@@ -266,7 +266,7 @@ function SatellitePage() {
             <div className="flex items-center gap-4 text-right">
               <div>
                 <div className="text-[10px] uppercase text-muted-foreground">Area</div>
-                <div className="text-base font-bold text-foreground">{spill.metrics.areaKm2} km²</div>
+                <div className="text-base font-bold text-foreground">{(spill.maskAreaKm2 ?? spill.metrics.areaKm2)} km²</div>
               </div>
               <div>
                 <div className="text-[10px] uppercase text-muted-foreground">Confidence</div>
@@ -374,7 +374,7 @@ function SatellitePage() {
               <Marker
                 lat={spill.metrics.centroid.lat}
                 lon={spill.metrics.centroid.lon}
-                label={`Slick Centroid (${spill.metrics.areaKm2} km²)`}
+                label={`Slick Centroid (${(spill.maskAreaKm2 ?? spill.metrics.areaKm2)} km²)`}
                 pulse
               />
             )}
@@ -408,7 +408,7 @@ function SatellitePage() {
                 <div className="grid grid-cols-2 gap-3">
                   <Stat
                     label="Slick Area"
-                    value={`${spill.metrics.areaKm2} km²`}
+                    value={`${(spill.maskAreaKm2 ?? spill.metrics.areaKm2)} km²`}
                     hint="Segmented surface"
                     highlight="cyan"
                   />
@@ -627,7 +627,7 @@ function SatellitePage() {
               k="Centroid Coordinates"
               v={`${spill.metrics.centroid.lat.toFixed(5)}° N, ${spill.metrics.centroid.lon.toFixed(5)}° E`}
             />
-            <KeyVal k="Spill Surface Area" v={`${spill.metrics.areaKm2} km²`} />
+            <KeyVal k="Spill Surface Area" v={`${(spill.maskAreaKm2 ?? spill.metrics.areaKm2)} km²`} />
             <KeyVal k="Perimeter Length" v={`${spill.metrics.perimeterM.toFixed(0)} m`} />
             <KeyVal
               k="Axes (Length × Width)"

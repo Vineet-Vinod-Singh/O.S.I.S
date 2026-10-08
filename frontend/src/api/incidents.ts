@@ -44,6 +44,7 @@ export interface Candidate {
 }
 export interface Detection {
   geometry: { type: "Polygon"; coordinates: [number, number][][] };
+  maskAreaKm2?: number;
   metrics: {
     areaKm2: number;
     perimeterM: number;
@@ -87,7 +88,22 @@ export function getIncidentLabel(
   if (source === "synthetic_demo") return "Arabian Sea Demo";
   if (source === "archived_sentinel1") return `Sentinel-1A (${sceneId.slice(0, 15)})`;
   if (item.mode === "UPLOAD") return "User Upload";
-  if (item.mode === "REAL") return `Real SAR — ${sceneId ? sceneId.slice(0, 20) : (item.id ? item.id.slice(0, 8) : "Active")}`;
+  if (item.mode === "REAL" && sceneId) {
+    const s1Match = sceneId.match(/^s1([a-d])/i);
+    const dateMatch = sceneId.match(/_(\d{4})(\d{2})(\d{2})t(\d{2})(\d{2})/i);
+    if (s1Match) {
+      const sat = `Sentinel-1${s1Match[1].toUpperCase()}`;
+      if (dateMatch) {
+        const [_, yyyy, mm, dd, hh, min] = dateMatch;
+        const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+        const month = months[parseInt(mm, 10) - 1];
+        return `${sat} · ${dd} ${month} ${yyyy} ${hh}:${min} UTC`;
+      }
+      return sat;
+    }
+    return `Real SAR — ${sceneId.slice(0, 20)}`;
+  }
+  if (item.mode === "REAL") return `Real SAR — ${item.id ? item.id.slice(0, 8) : "Active"}`;
 
   if (sceneId) {
     return sceneId.replace(/[-_]/g, " ").replace(/\b\w/g, (l) => l.toUpperCase());
