@@ -436,6 +436,17 @@ def fuse_evidence(candidate, pose_res, dist_to_land, has_land, geo_land_mask=Non
             "decisionPath": "Rejected: candidate has 0 area or malformed size."
         }
 
+    if geo_land_mask is None:
+        return {
+            "fusedScore": 0.0,
+            "rule": "geographic_land_validation_unavailable",
+            "evidence": {
+                "geoLandFraction": None,
+                "geographic_land_validation": "UNAVAILABLE",
+            },
+            "decisionPath": "Rejected: geographic land validation is unavailable."
+        }
+
     probs = pose_res["probs"]
     pred_mask = pose_res["predMask"]
 
@@ -451,7 +462,7 @@ def fuse_evidence(candidate, pose_res, dist_to_land, has_land, geo_land_mask=Non
     mean_p_la = float(probs[2][cmask].mean())
     la_overlap = float((pred_mask[cmask] == 2).sum()) / float(area)
     land_overlap = float((pred_mask[cmask] == 4).sum()) / float(area)
-    geo_land_overlap = float(geo_land_mask[cmask].sum()) / float(area) if geo_land_mask is not None else 0.0
+    geo_land_overlap = float(geo_land_mask[cmask].sum()) / float(area)
 
     # Dynamic Coastal Proximity
     cand_dist_land = float(dist_to_land[cmask].min()) if has_land else 9999.0
@@ -751,13 +762,25 @@ def main():
         else:
             dist_to_land = np.full_like(pose_out["predMask"], 9999.0, dtype=np.float32)
 
+        geo_land_mask = None
+        try:
+            from global_land_mask import globe
+            min_lon, min_lat, max_lon, max_lat = sc["aoiBbox"]
+            height, width = vv_db.shape
+            lons = min_lon + (np.arange(width) + 0.5) * (max_lon - min_lon) / width
+            lats = max_lat - (np.arange(height) + 0.5) * (max_lat - min_lat) / height
+            lon_grid, lat_grid = np.meshgrid(lons, lats)
+            geo_land_mask = globe.is_land(lat_grid, lon_grid)
+        except ImportError:
+            pass
+
         # 6. Evaluate Hybrid Evidence Fusion on Classical Candidates
         t_fuse0 = time.perf_counter()
         fused_candidates = []
         retained_hybrid_candidates = []
 
         for cand in classical_out["retainedCandidates"]:
-            f_eval = fuse_evidence(cand, pose_out, dist_to_land, has_land)
+            f_eval = fuse_evidence(cand, pose_out, dist_to_land, has_land, geo_land_mask)
             cand_entry = dict(cand)
             cand_entry["fusion"] = f_eval
             fused_candidates.append(cand_entry)

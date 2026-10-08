@@ -54,6 +54,26 @@ def test_clearly_land_candidate():
     assert res["fusedScore"] == 0.0
     assert res["rule"] == "geographic_land_rejected"
 
+def test_unavailable_geographic_land_validation_fails_closed():
+    cmask = np.zeros((10, 10), dtype=bool)
+    cmask[2:8, 2:8] = True
+    candidate = {
+        "cmask": cmask, "area": 36, "heuristicScore": 0.8,
+        "vvDampingDb": 5.0, "vvVhDifferenceDb": 2.0
+    }
+    pose_res = {
+        "probs": np.zeros((5, 10, 10)),
+        "predMask": np.zeros((10, 10), dtype=int)
+    }
+    pose_res["probs"][1, cmask] = 0.9
+    pose_res["predMask"][cmask] = 1
+
+    res = m.fuse_evidence(candidate, pose_res, np.full((10, 10), 999.0), False)
+    assert res["fusedScore"] == 0.0
+    assert res["rule"] == "geographic_land_validation_unavailable"
+    assert res["evidence"]["geoLandFraction"] is None
+    assert res["evidence"]["geographic_land_validation"] == "UNAVAILABLE"
+
 def test_mixed_land_water_candidate():
     """3. mixed land/water candidate -> evaluated using water fraction"""
     cmask = np.zeros((10, 10), dtype=bool)
@@ -213,5 +233,4 @@ def test_oman_regression():
     res = m.fuse_evidence(candidate, pose_res, np.full((512, 512), 999.0), False, geo_land_mask)
     assert res["fusedScore"] > 0.5
     assert res["rule"] != "geographic_land_rejected"
-
 

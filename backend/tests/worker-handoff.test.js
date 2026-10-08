@@ -19,6 +19,7 @@ const originals = {
 
 let capturedTrusted = null;
 let scenes = new Map();
+let acquisitionBboxes = [];
 
 pool.connect = async () => ({
   async query(sql, params = []) {
@@ -52,7 +53,10 @@ pool.query = async (sql, params = []) => {
   return { rows: [], rowCount: 1 };
 };
 
-sentinel.getSentinel1GrdImage = async () => ({ buffer: Buffer.from('test raster') });
+sentinel.getSentinel1GrdImage = async ({ bbox }) => {
+  acquisitionBboxes.push(bbox);
+  return { buffer: Buffer.from('test raster') };
+};
 incidentService.analyze = async (payload, trusted) => {
   capturedTrusted = trusted;
   return { id: 'test-incident-id' };
@@ -96,6 +100,33 @@ test('worker handoff passes acquisitionBbox as scene bbox and preserves full STA
   const sceneData = capturedTrusted._scene;
   assert.deepEqual(sceneData.bbox, aoi, 'incident handoff must use acquisitionBbox');
   assert.deepEqual(sceneData.stacBbox, fullStacBbox, 'original scene footprint/bbox must remain available as provenance');
+});
+
+test('worker reuses a stored replay acquisition bbox within the STAC footprint', async () => {
+  capturedTrusted = null;
+  acquisitionBboxes = [];
+  scenes.clear();
+  const fullStacBbox = [55.264766, 16.779904, 57.917134, 18.854415];
+  const replayBbox = [56.24, 17.40, 56.43, 17.59];
+  scenes.set(106, {
+    id: 106,
+    scene_id: 'test_replay_with_stored_acquisition_bbox',
+    collection: 'sentinel-1-grd',
+    status: 'queued',
+    bbox: fullStacBbox,
+    acquired_at: '2026-07-02T14:22:03Z',
+    polarization: ['VV', 'VH'],
+    platform: 'S1D',
+    orbit_direction: 'ASCENDING',
+    stac_feature: JSON.stringify({ bbox: fullStacBbox }),
+    artifact_metadata: { bbox: fullStacBbox, acquisitionBbox: replayBbox }
+  });
+
+  const result = await worker.processSceneById(106);
+  assert.equal(result.status, 'completed');
+  assert.deepEqual(acquisitionBboxes, [replayBbox, replayBbox]);
+  assert.deepEqual(capturedTrusted._scene.bbox, replayBbox);
+  assert.deepEqual(capturedTrusted._scene.stacBbox, fullStacBbox);
 });
 
 test('TEST A: October 5 scene gets environment override in worker handoff', async () => {

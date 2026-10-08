@@ -75,6 +75,7 @@ class ExperimentalSpillDetector:
         classical = m.run_classical_candidates(vv, vh, ocean)
         method = payload.get("detector", "hybrid")
         checkpoint_hash = None
+        geographic_land_validation = "NOT_APPLICABLE"
         if method == "hybrid":
             weights = Path(os.environ.get("REAL_MODEL_PATH", str(Path(__file__).resolve().parents[2] / "best_sar_model.pth")))
             if not weights.is_file():
@@ -103,8 +104,10 @@ class ExperimentalSpillDetector:
                 lats = max_lat - (rys + 0.5) * (max_lat - min_lat) / 512.0
                 lon_grid, lat_grid = np.meshgrid(lons, lats)
                 geo_land_mask = globe.is_land(lat_grid, lon_grid)
+                geographic_land_validation = "AVAILABLE"
             except ImportError:
                 geo_land_mask = None
+                geographic_land_validation = "UNAVAILABLE"
 
             retained = []
             for candidate in classical["retainedCandidates"]:
@@ -163,15 +166,18 @@ class ExperimentalSpillDetector:
         for detection in detections:
             detection["passesOilEvidenceGate"] = detection in supported and quality_ok and method == "hybrid"
         outcome = ("SPILL_DETECTED" if method == "hybrid" and quality_ok and supported
+                   else "ANALYSIS_INCONCLUSIVE" if geographic_land_validation == "UNAVAILABLE"
                    else "NO_SPILL_DETECTED" if quality_ok and not detections
                    else "ANALYSIS_INCONCLUSIVE")
         reason = ("Hybrid oil-like evidence passed the conservative prototype quality gate; not confirmed oil." if outcome == "SPILL_DETECTED"
+                  else "Geographic land validation unavailable; no candidates were accepted." if geographic_land_validation == "UNAVAILABLE"
                   else "No significant retained oil-like anomaly within the valid analyzed subset; not proof of clean water." if outcome == "NO_SPILL_DETECTED"
                   else "Detector uncertainty or insufficient coverage/ocean texture; classical candidates alone cannot reliably identify oil.")
         return {"scene": scene, "detections": detections,
             "mask": mask.reshape(128, 4, 128, 4).any(axis=(1, 3)).astype(int).tolist(),
             "detector": {"name": method, "status": "experimental", "version": m.FUSION_CONFIG["version"],
                 "outcome": outcome, "reason": reason,
+                "geographic_land_validation": geographic_land_validation,
                 "quality": {"jointValidFraction": coverage, "oceanFraction": ocean_fraction, "vvStdDb": texture,
                             "gate": "coverage>=0.5, ocean>=0.2, 0.1<=VV std<=20, valid geometry; hybrid confidence>=0.7, oil support>=0.15 and greater than lookalike support"},
                 "checkpointSha256": checkpoint_hash, "geometryRejected": rejected,

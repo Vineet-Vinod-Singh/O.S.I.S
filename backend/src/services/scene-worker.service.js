@@ -136,7 +136,7 @@ async function claimNextScene() {
 
     const { rows } = await client.query(
       `SELECT id, scene_id, collection, bbox, acquired_at, polarization,
-              platform, orbit_direction, stac_feature
+              platform, orbit_direction, stac_feature, artifact_metadata
          FROM processed_scenes
         WHERE status = 'queued'
         ORDER BY acquired_at ASC NULLS LAST
@@ -177,7 +177,7 @@ async function claimSceneById(id) {
     await client.query('BEGIN');
     const { rows } = await client.query(
       `SELECT id, scene_id, collection, bbox, acquired_at, polarization,
-              platform, orbit_direction, stac_feature
+              platform, orbit_direction, stac_feature, artifact_metadata
          FROM processed_scenes
         WHERE id = $1 AND status = 'queued'
         FOR UPDATE SKIP LOCKED`,
@@ -287,45 +287,50 @@ async function ensureSceneDir(sceneId) {
 async function acquireScene(scene) {
   const { scene_id, bbox: bboxRaw, acquired_at, stac_feature } = scene;
 
-  // --- Resolve bboxes ---
-  // The DB 'bbox' field now stores the selected <=0.2° acquisition bbox (from poller)
-  let acquisitionBbox = bboxRaw;
-  if (!Array.isArray(acquisitionBbox) && typeof acquisitionBbox === 'string') {
-      try { acquisitionBbox = JSON.parse(acquisitionBbox); } catch(e) {}
-  }
-
+  const parseBbox = (value) => {
+    if (Array.isArray(value)) return value;
+    if (typeof value !== 'string') return null;
+    try { return JSON.parse(value); } catch (_) { return null; }
+  };
+  const metadata = typeof scene.artifact_metadata === 'string'
+    ? JSON.parse(scene.artifact_metadata)
+    : (scene.artifact_metadata || {});
   const feat = typeof stac_feature === 'string' ? JSON.parse(stac_feature) : (stac_feature || {});
-  const fullSceneBbox = feat.bbox;
+  const storedBbox = parseBbox(bboxRaw);
+  const fullSceneBbox = parseBbox(feat.bbox) || parseBbox(metadata.bbox) || storedBbox;
+  const replayBbox = parseBbox(metadata.acquisitionBbox);
+  let acquisitionBbox = replayBbox || storedBbox;
+  const isSubsetBbox = (bbox) =>
+    Array.isArray(bbox) && bbox.length === 4 && bbox.every(Number.isFinite) &&
+    bbox[2] > bbox[0] && bbox[3] > bbox[1] &&
+    bbox[2] - bbox[0] <= 0.2 && bbox[3] - bbox[1] <= 0.2;
+  const isWithinScene = (bbox) => {
+    if (!Array.isArray(fullSceneBbox) || fullSceneBbox.length !== 4 ||
+        !fullSceneBbox.every(Number.isFinite)) return false;
+    const [sceneMinLon, sceneMinLat, sceneMaxLon, sceneMaxLat] = fullSceneBbox;
+    const [aoiMinLon, aoiMinLat, aoiMaxLon, aoiMaxLat] = bbox;
+    const eps = 0.0001;
+    return aoiMinLon >= sceneMinLon - eps && aoiMaxLon <= sceneMaxLon + eps &&
+      aoiMinLat >= sceneMinLat - eps && aoiMaxLat <= sceneMaxLat + eps;
+  };
 
-  if (!Array.isArray(acquisitionBbox) || acquisitionBbox.length !== 4) {
-    throw new Error(`Scene ${scene_id}: no valid acquisition bbox available`);
+  if (replayBbox && (!isSubsetBbox(replayBbox) || !isWithinScene(replayBbox))) {
+    throw new Error(`Scene ${scene_id}: Stored replay acquisition bbox is invalid or outside the STAC scene footprint`);
   }
 
-  // Backwards compatibility for scenes queued before Priority Areas step:
-  // If the DB bbox is the full >0.2° scene footprint, we must fall back to a priority area.
-  if (acquisitionBbox[2] - acquisitionBbox[0] > 0.21 || acquisitionBbox[3] - acquisitionBbox[1] > 0.21) {
-    if (poller.PRIORITY_AREAS && poller.PRIORITY_AREAS.length > 0) {
-        acquisitionBbox = poller.PRIORITY_AREAS[0].bbox;
-    } else {
-        throw new Error(`Scene ${scene_id}: Old full-scene bbox requires a fallback Priority Area, but none are configured.`);
+  if (!replayBbox && !isSubsetBbox(acquisitionBbox)) {
+    acquisitionBbox = (poller.PRIORITY_AREAS || [])
+      .map((area) => area.bbox)
+      .find((bbox) => isSubsetBbox(bbox) && isWithinScene(bbox));
+    if (!acquisitionBbox) {
+      throw new Error(`Scene ${scene_id}: no configured <=0.2 degree acquisition bbox is within the STAC scene footprint`);
     }
   }
 
   // --- Verify AOI containment ---
   // Verify that the selected acquisitionBbox is actually within the fullSceneBbox
-  if (Array.isArray(fullSceneBbox) && fullSceneBbox.length === 4) {
-      const [sceneMinLon, sceneMinLat, sceneMaxLon, sceneMaxLat] = fullSceneBbox;
-      const [aoiMinLon, aoiMinLat, aoiMaxLon, aoiMaxLat] = acquisitionBbox;
-
-      const eps = 0.0001;
-      if (
-        aoiMinLon < sceneMinLon - eps ||
-        aoiMaxLon > sceneMaxLon + eps ||
-        aoiMinLat < sceneMinLat - eps ||
-        aoiMaxLat > sceneMaxLat + eps
-      ) {
-        throw new Error(`Scene ${scene_id}: Acquisition bbox [${acquisitionBbox.join(',')}] is not within the scene footprint [${fullSceneBbox.join(',')}]`);
-      }
+  if (!isSubsetBbox(acquisitionBbox) || !isWithinScene(acquisitionBbox)) {
+    throw new Error(`Scene ${scene_id}: Acquisition bbox [${acquisitionBbox.join(',')}] is invalid or outside the scene footprint [${fullSceneBbox}]`);
   }
 
   // --- Resolve acquisition timestamp ---

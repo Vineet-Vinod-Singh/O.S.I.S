@@ -127,6 +127,45 @@ class RasterTests(unittest.TestCase):
             result = self.detect()
         self.assertEqual(result["detector"]["outcome"], "ANALYSIS_INCONCLUSIVE")
 
+    def test_missing_geographic_land_mask_is_reported_and_inconclusive(self):
+        self.write()
+        mask = self.m.np.zeros((512, 512), dtype=bool)
+        mask[100:110, 100:140] = True
+        candidate = {
+            "cmask": mask, "area": int(mask.sum()), "heuristicScore": .8,
+            "vvDampingDb": 5.0, "vvVhDifferenceDb": 2.0
+        }
+        pose = {
+            "probs": self.m.np.zeros((5, 512, 512), dtype=self.m.np.float32),
+            "predMask": self.m.np.zeros((512, 512), dtype=self.m.np.uint8)
+        }
+
+        class Model:
+            def load_state_dict(self, state, strict):
+                pass
+
+            def to(self, device):
+                return self
+
+            def eval(self):
+                return self
+
+        model = Model()
+        with patch.dict(os.environ, {"REAL_MODEL_PATH": str(self.file)}), \
+             patch.dict("sys.modules", {"global_land_mask": None}), \
+             patch.object(a, "experiment", return_value=self.m), \
+             patch.object(self.m, "run_classical_candidates", return_value={
+                 "retainedCandidates": [candidate], "totalClusters": 1
+             }), \
+             patch.object(self.m, "run_poseatsea_inference", return_value=pose), \
+             patch.object(self.m.smp, "Unet", return_value=model), \
+             patch.object(self.m.torch, "load", return_value={}):
+            result = self.detect("hybrid")
+
+        self.assertEqual(result["detector"]["geographic_land_validation"], "UNAVAILABLE")
+        self.assertEqual(result["detector"]["outcome"], "ANALYSIS_INCONCLUSIVE")
+        self.assertEqual(result["detections"], [])
+
     def test_coverage_thresholds(self):
         rng = self.m.np.random.default_rng(12345)
         base = rng.normal(-25, 2, (512, 512)).astype(self.m.np.float32)
