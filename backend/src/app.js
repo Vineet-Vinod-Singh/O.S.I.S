@@ -12,6 +12,8 @@ const reportsRoutes = require('./routes/reports.routes');
 // DAY 1 — autonomous ingestion
 const ingestionRoutes = require('./routes/ingestion.routes');
 const scenePoller = require('./services/scene-poller.service');
+// DAY 1.5 - risk engine
+const riskRoutes = require('./routes/risk.routes');
 // DAY 2 — autonomous acquisition worker
 const workerRoutes = require('./routes/worker.routes');
 const sceneWorker = require('./services/scene-worker.service');
@@ -33,6 +35,8 @@ app.use('/api/vessels', vesselsRoutes);
 app.use('/api/reports', reportsRoutes);
 // DAY 1 — scene ingestion & deduplication queue
 app.use('/api/ingestion', ingestionRoutes);
+// DAY 1.5 — risk
+app.use('/api/risk', riskRoutes);
 // DAY 2 — scene acquisition worker
 app.use('/api/worker', workerRoutes);
 

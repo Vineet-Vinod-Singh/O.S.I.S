@@ -82,39 +82,61 @@ async function searchCatalog({
   datetime,
   limit = STAC_PAGE_SIZE,
   collections = ['sentinel-1-grd'],
+  nextRequest = null,
+  maxPages = STAC_MAX_PAGES,
 }) {
-  const [from, to] = String(datetime).split('/');
-  const duration = Date.parse(to) - Date.parse(from);
-  if (!Number.isFinite(duration) || duration < 0 || duration > 86400000) throw new Error('Search interval must be at most 24 hours');
-
-  if (bbox !== undefined) {
-    if (!Array.isArray(bbox) || bbox.length !== 4 || !bbox.every(Number.isFinite) ||
-        !(bbox[0] >= -180 && bbox[2] <= 180 && bbox[1] >= -90 && bbox[3] <= 90 &&
-          bbox[2] > bbox[0] && bbox[3] > bbox[1])) {
-      throw new Error('Invalid bbox geometry');
-    }
-  }
-
-  const actualLimit = Math.min(Math.max(1, limit), 500);
-
   let currentUrl = CDSE_CATALOG_URL;
   let currentMethod = 'POST';
   let currentHeaders = {
     'Content-Type': 'application/json',
     'Accept': 'application/geo+json',
   };
-  let currentBody = JSON.stringify({
+  const actualLimit = Math.min(Math.max(1, limit), 500);
+  let baseBody = {
     collections,
     bbox,
     datetime,
     limit: actualLimit,
-  });
+  };
+  let currentBody;
+
+  if (nextRequest) {
+    currentUrl = nextRequest.url;
+    currentMethod = nextRequest.method;
+    currentHeaders = nextRequest.headers || currentHeaders;
+    
+    let nextBodyObj = {};
+    if (typeof nextRequest.body === 'string') {
+        try { nextBodyObj = JSON.parse(nextRequest.body); } catch(e) {}
+    } else if (nextRequest.body) {
+        nextBodyObj = nextRequest.body;
+    }
+    
+    currentBody = JSON.stringify({
+        ...baseBody,
+        ...nextBodyObj
+    });
+  } else {
+    const [from, to] = String(datetime).split('/');
+    const duration = Date.parse(to) - Date.parse(from);
+    if (!Number.isFinite(duration) || duration < 0 || duration > 86400000) throw new Error('Search interval must be at most 24 hours');
+
+    if (bbox !== undefined) {
+      if (!Array.isArray(bbox) || bbox.length !== 4 || !bbox.every(Number.isFinite) ||
+          !(bbox[0] >= -180 && bbox[2] <= 180 && bbox[1] >= -90 && bbox[3] <= 90 &&
+            bbox[2] > bbox[0] && bbox[3] > bbox[1])) {
+        throw new Error('Invalid bbox geometry');
+      }
+    }
+
+    currentBody = JSON.stringify(baseBody);
+  }
 
   const allFeatures = [];
   let pagesFetched = 0;
   let nextLink = null;
 
-  while (pagesFetched < STAC_MAX_PAGES) {
+  while (pagesFetched < maxPages) {
     const token = await getAccessToken();
     
     const fetchOptions = {
@@ -125,7 +147,7 @@ async function searchCatalog({
       fetchOptions.body = currentBody;
     }
 
-    console.log('Sending request to:', currentUrl, 'with method:', currentMethod, 'and body:', currentBody);
+    console.log('Sending request to:', currentUrl, 'with method:', currentMethod);
     const response = await fetch(currentUrl, fetchOptions);
     const data = await response.json();
 
@@ -152,12 +174,16 @@ async function searchCatalog({
       } else {
         nextBodyObj = nextLink.body;
       }
-      // Merge with the original search parameters
+      
+      // If we started with a nextRequest, we might not have bbox/datetime/actualLimit 
+      // in the current context easily. The easiest way is to parse the current body
+      // and merge the nextLink.body into it.
+      let baseBody = {};
+      if (currentBody) {
+         try { baseBody = JSON.parse(currentBody); } catch(e) {}
+      }
       currentBody = JSON.stringify({
-        collections,
-        bbox,
-        datetime,
-        limit: actualLimit,
+        ...baseBody,
         ...nextBodyObj
       });
     } else {
@@ -165,11 +191,14 @@ async function searchCatalog({
     }
   }
 
-  if (nextLink) {
-    throw new Error(`Pagination interrupted: maximum pages (${STAC_MAX_PAGES}) reached while more results exist.`);
-  }
+  const nextReq = nextLink ? {
+    url: currentUrl,
+    method: currentMethod,
+    headers: currentHeaders,
+    body: currentBody
+  } : null;
 
-  return { type: 'FeatureCollection', features: allFeatures };
+  return { type: 'FeatureCollection', features: allFeatures, nextRequest: nextReq };
 }
 
 /**

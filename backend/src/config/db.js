@@ -8,8 +8,10 @@ const connectionString = rawUrl.replace(/^DATABASE_URL=/, '').trim();
 
 const pool = new Pool({
   connectionString,
-  connectionTimeoutMillis: 3000,
-  query_timeout: 5000,
+  connectionTimeoutMillis: 10000,
+  idleTimeoutMillis: 30000,
+  max: 10,
+  query_timeout: 15000,
   ssl: connectionString.includes('supabase.com') ? { rejectUnauthorized: false } : undefined,
 });
 

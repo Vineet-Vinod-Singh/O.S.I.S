@@ -99,14 +99,14 @@ test('AIS Service - Mocked WebSocket Reconnect & Parsing', async () => {
         assert.strictEqual(receivedSub.Apikey, 'mock-key');
 
         await new Promise(resolve => setTimeout(resolve, 100));
-        assert.strictEqual(aisService.batch.length, 2);
-        assert.strictEqual(aisService.batch[0].mmsi, '123456789');
-        assert.strictEqual(aisService.batch[0].speed, null);
-        assert.strictEqual(aisService.batch[0].course, null);
+        assert.strictEqual(aisService.currentBatch.length, 2);
+        assert.strictEqual(aisService.currentBatch[0].mmsi, '123456789');
+        assert.strictEqual(aisService.currentBatch[0].speed, null);
+        assert.strictEqual(aisService.currentBatch[0].course, null);
         
-        assert.strictEqual(aisService.batch[1].mmsi, '987654321');
-        assert.strictEqual(aisService.batch[1].speed, 15.2);
-        assert.strictEqual(aisService.batch[1].course, 180.5);
+        assert.strictEqual(aisService.currentBatch[1].mmsi, '987654321');
+        assert.strictEqual(aisService.currentBatch[1].speed, 15.2);
+        assert.strictEqual(aisService.currentBatch[1].course, 180.5);
 
         await new Promise(resolve => setTimeout(resolve, 150));
         // Client should have been disconnected and reconnected scheduled

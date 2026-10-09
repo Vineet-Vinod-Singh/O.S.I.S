@@ -112,7 +112,7 @@ let _lastError = null;
 async function loadState() {
   try {
     const { rows } = await pool.query(
-      'SELECT last_polled_at, last_scene_at, poll_count, scenes_queued FROM ingestion_state WHERE singleton = TRUE LIMIT 1'
+      'SELECT last_polled_at, last_scene_at, poll_count, scenes_queued, regions_state FROM ingestion_state WHERE singleton = TRUE LIMIT 1'
     );
     return rows[0] || null;
   } catch (err) {
@@ -121,17 +121,18 @@ async function loadState() {
   }
 }
 
-async function saveState({ lastPollAt, lastSceneAt, pollCount, scenesQueued }) {
+async function saveState({ lastPollAt, lastSceneAt, pollCount, scenesQueued, regionsState }) {
   try {
     await pool.query(
-      `INSERT INTO ingestion_state (singleton, last_polled_at, last_scene_at, poll_count, scenes_queued)
-       VALUES (TRUE, $1, $2, $3, $4)
+      `INSERT INTO ingestion_state (singleton, last_polled_at, last_scene_at, poll_count, scenes_queued, regions_state)
+       VALUES (TRUE, $1, $2, $3, $4, $5::jsonb)
        ON CONFLICT (singleton) DO UPDATE
          SET last_polled_at = EXCLUDED.last_polled_at,
              last_scene_at  = GREATEST(ingestion_state.last_scene_at, EXCLUDED.last_scene_at),
              poll_count     = EXCLUDED.poll_count,
-             scenes_queued  = EXCLUDED.scenes_queued`,
-      [lastPollAt, lastSceneAt, pollCount, scenesQueued]
+             scenes_queued  = EXCLUDED.scenes_queued,
+             regions_state  = EXCLUDED.regions_state`,
+      [lastPollAt, lastSceneAt, pollCount, scenesQueued, JSON.stringify(regionsState || {})]
     );
   } catch (err) {
     console.warn('[poller] Could not save ingestion_state:', err.message);
@@ -209,77 +210,124 @@ async function pollOnce() {
       state = await loadState();
     } catch (_) {}
 
-  let fromTime;
+  const regionsState = state?.regions_state || {};
+  let globalFromTime;
   if (state && state.last_scene_at) {
-    fromTime = new Date(new Date(state.last_scene_at).getTime() + 1000);
+    globalFromTime = new Date(new Date(state.last_scene_at).getTime() + 1000);
   } else {
-    fromTime = new Date(now.getTime() - INITIAL_LOOKBACK_HOURS * 3600 * 1000);
-  }
-
-  const windowMs = Math.min(now - fromTime, 23 * 3600 * 1000);
-  const toTime   = new Date(fromTime.getTime() + windowMs);
-  const datetime = `${fromTime.toISOString()}/${toTime.toISOString()}`;
-
-  console.log(`[poller] Poll #${_pollCount + 1} | window: ${fromTime.toISOString()} → ${toTime.toISOString()}`);
-
-  let features = [];
-  try {
-    const catalog = await searchCatalog({
-      bbox: [-180, -90, 180, 90], // Satisfy CDSE STAC spatial requirement for global discovery
-      datetime,
-      collections: ['sentinel-1-grd'],
-    });
-    features = catalog.features || [];
-    console.log(`[poller] STAC discovered ${features.length} features globally`);
-  } catch (err) {
-    _lastError = err.message;
-    console.error('[poller] CDSE catalog error:', err.message);
-    return;
+    globalFromTime = new Date(now.getTime() - INITIAL_LOOKBACK_HOURS * 3600 * 1000);
   }
 
   let newScenes = 0;
-  let latestAcquiredAt = null;
+  let overallLatestAcquiredAt = null;
   let validFeaturesCount = 0;
   let invalidFeaturesCount = 0;
   let discardedCount = 0;
   let matchesCount = 0;
+  let isPartial = false;
 
-  for (const feature of features) {
-    // 1. Read and validate original STAC bbox
-    const sceneBbox = feature.bbox;
-    if (!Array.isArray(sceneBbox) || sceneBbox.length !== 4 || !sceneBbox.every(Number.isFinite)) {
-      invalidFeaturesCount++;
+  for (const area of PRIORITY_AREAS) {
+    if (newScenes >= POLL_QUEUE_BATCH_SIZE) {
+      isPartial = true;
+      break;
+    }
+
+    let areaState = regionsState[area.id] || {};
+    let fromTime = areaState.fromTime ? new Date(areaState.fromTime) : globalFromTime;
+    let toTime;
+    
+    if (areaState.toTime) {
+      toTime = new Date(areaState.toTime);
+    } else {
+      const windowMs = Math.min(now - fromTime, 23 * 3600 * 1000);
+      toTime = new Date(fromTime.getTime() + windowMs);
+    }
+
+    if (fromTime >= toTime && !areaState.nextRequest) {
       continue;
     }
-    validFeaturesCount++;
 
-    // 2. Track the latest acquisition time for ALL valid discovered scenes, 
-    // even if discarded, so the checkpoint advances over irrelevant scenes too.
-    const acq = feature.properties?.datetime || feature.properties?.start_datetime;
-    if (acq) {
-      const d = new Date(acq);
-      if (!latestAcquiredAt || d > latestAcquiredAt) latestAcquiredAt = d;
+    const datetime = `${fromTime.toISOString()}/${toTime.toISOString()}`;
+    let nextRequest = areaState.nextRequest || null;
+    let regionCompleted = false;
+    let regionFailed = false;
+    let regionLatestAcq = null;
+
+    do {
+      let catalog;
+      try {
+        catalog = await searchCatalog({
+          bbox: area.bbox,
+          datetime,
+          collections: ['sentinel-1-grd'],
+          nextRequest,
+          maxPages: 1
+        });
+      } catch (err) {
+        _lastError = err.message;
+        console.error(`[poller] CDSE catalog error for area ${area.id}:`, err.message);
+        if (nextRequest) {
+           console.log(`[poller] Token may be expired. Dropping nextRequest for ${area.id} to retry from page 1 next cycle.`);
+           nextRequest = null;
+        }
+        regionFailed = true;
+        break; 
+      }
+
+      const features = catalog.features || [];
+      console.log(`[poller] STAC discovered ${features.length} features for ${area.id}`);
+      
+      for (const feature of features) {
+        const sceneBbox = feature.bbox;
+        if (!Array.isArray(sceneBbox) || sceneBbox.length !== 4 || !sceneBbox.every(Number.isFinite)) {
+          invalidFeaturesCount++;
+          continue;
+        }
+        validFeaturesCount++;
+        matchesCount++;
+
+        const acq = feature.properties?.datetime || feature.properties?.start_datetime;
+        if (acq) {
+          const d = new Date(acq);
+          if (!regionLatestAcq || d > regionLatestAcq) regionLatestAcq = d;
+        }
+
+        const inserted = await enqueueScene(feature, area.bbox);
+        if (inserted) {
+          newScenes++;
+          console.log(`[poller] Queued scene: ${feature.id} for area: ${area.id}`);
+        }
+      }
+
+      nextRequest = catalog.nextRequest;
+      
+      if (newScenes >= POLL_QUEUE_BATCH_SIZE && nextRequest) {
+        break;
+      }
+    } while (nextRequest);
+
+    if (!regionFailed && !nextRequest) {
+      regionCompleted = true;
     }
 
-    // 3. Find intersecting priority areas
-    const intersecting = PRIORITY_AREAS.filter(area => intersects(sceneBbox, area.bbox));
-    if (intersecting.length === 0) {
-      discardedCount++;
-      continue;
-    }
-    matchesCount++;
-
-    // 4. Select the highest priority area (first in the sorted list)
-    const selectedArea = intersecting[0];
-    if (intersecting.length > 1) {
-      console.log(`[poller] Scene ${feature.id} intersects ${intersecting.length} areas. Selected ${selectedArea.id}.`);
-    }
-
-    // 5. Enqueue with the selected acquisition bbox
-    const inserted = await enqueueScene(feature, selectedArea.bbox);
-    if (inserted) {
-      newScenes++;
-      console.log(`[poller] Queued scene: ${feature.id} for area: ${selectedArea.id}`);
+    if (regionCompleted) {
+      regionsState[area.id] = {
+        fromTime: new Date(toTime.getTime() + 1000).toISOString(),
+        toTime: null,
+        nextRequest: null
+      };
+      if (regionLatestAcq) {
+        if (!overallLatestAcquiredAt || regionLatestAcq > overallLatestAcquiredAt) overallLatestAcquiredAt = regionLatestAcq;
+      } else {
+        if (!overallLatestAcquiredAt || toTime > overallLatestAcquiredAt) overallLatestAcquiredAt = toTime;
+      }
+    } else {
+      regionsState[area.id] = {
+        fromTime: fromTime.toISOString(),
+        toTime: toTime.toISOString(),
+        nextRequest: nextRequest
+      };
+      isPartial = true;
     }
   }
 
@@ -291,9 +339,10 @@ async function pollOnce() {
 
   await saveState({
     lastPollAt: now,
-    lastSceneAt: latestAcquiredAt || toTime,
+    lastSceneAt: isPartial ? (state?.last_scene_at || null) : (overallLatestAcquiredAt || (state?.last_scene_at || null)),
     pollCount: (state?.poll_count || 0) + 1,
     scenesQueued: (state?.scenes_queued || 0) + newScenes,
+    regionsState
   });
   } finally {
     _inFlight = false;

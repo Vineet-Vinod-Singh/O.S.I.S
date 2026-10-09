@@ -142,13 +142,9 @@ test('Pagination: Failure safety', async () => {
     }
 });
 
-test('Pagination: Max-page safety', async () => {
+test('Pagination: Max-page returns nextRequest', async () => {
     const originalRequest = https.request;
-    // Set max pages to 2 for this test
-    process.env.STAC_MAX_PAGES = '2';
-    // We need to re-require or mock STAC_MAX_PAGES. Since it's evaluated at module load time, 
-    // we can't easily change it dynamically if it's already loaded.
-    // Wait, let's just use the loaded STAC_MAX_PAGES, which is 10.
+    // STAC_MAX_PAGES defaults to 10
     let stacRequests = 0;
     try {
         https.request = (opts, cb) => {
@@ -164,12 +160,12 @@ test('Pagination: Max-page safety', async () => {
             })(opts, cb);
         };
 
-        await assert.rejects(
-            sentinel.searchCatalog({ datetime: '2024-06-19T00:00:00Z/2024-06-19T01:00:00Z' }),
-            /maximum pages .* reached/
-        );
-        // Default max pages is 10
+        const result = await sentinel.searchCatalog({ datetime: '2024-06-19T00:00:00Z/2024-06-19T01:00:00Z' });
+        
+        assert.equal(result.features.length, 10);
         assert.equal(stacRequests, 10);
+        assert.ok(result.nextRequest);
+        assert.equal(result.nextRequest.url, 'https://sh.dataspace.copernicus.eu/catalog/v1/search?page=11');
     } finally {
         https.request = originalRequest;
     }
