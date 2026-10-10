@@ -3,12 +3,33 @@
 const WebSocket = require('ws');
 const pool = require('../config/db');
 
+const MAX_NODE_TIMEOUT_MS = 2147483647;
+const MAX_NODE_TIMEOUT_BIGINT = BigInt(MAX_NODE_TIMEOUT_MS);
+
 class AISService {
-  constructor() {
+  constructor({
+    WebSocketImpl = WebSocket,
+    dbPool = pool,
+    setTimeoutFn = setTimeout,
+    clearTimeoutFn = clearTimeout,
+    random = Math.random
+  } = {}) {
+    this.WebSocketImpl = WebSocketImpl;
+    this.pool = dbPool;
+    this.setTimeoutFn = setTimeoutFn;
+    this.clearTimeoutFn = clearTimeoutFn;
+    this.random = random;
+
     this.ws = null;
+    this.activeConnection = null;
+    this.lifecycleGeneration = 0;
+    this.connectionAttemptCounter = 0;
     this.isActive = false;
     this.reconnectAttempts = 0;
     this.reconnectTimer = null;
+    this.reconnectRemainingMs = null;
+    this.reconnectGeneration = null;
+    this.stableTimer = null;
     this.cleanupTimer = null;
     
     this.pendingBatches = [];
@@ -19,9 +40,16 @@ class AISService {
     // Temporary diagnostics counters
     this.diagTimer = null;
     this.diagTotalMsgs = 0;
+    this.diagParsedMsgs = 0;
+    this.diagMalformedMsgs = 0;
     this.diagPosReports = 0;
     this.diagInvalidPos = 0;
     this.diagQueued = 0;
+    this.diagRegionAccepted = 0;
+    this.diagRegionRejected = 0;
+    this.diagRegionRejectReasons = {};
+    this.diagInvalidPositionReasons = {};
+    this.diagBatchQueued = 0;
     
     // Strict DB metrics
     this.diagDbAttempted = 0;
@@ -64,14 +92,22 @@ class AISService {
 
   async stop() {
     this.isActive = false;
-    if (this.ws) {
-      this.ws.close();
-      this.ws = null;
+    this.lifecycleGeneration++;
+    const connection = this.activeConnection;
+    this.activeConnection = null;
+    const socket = connection ? connection.socket : this.ws;
+    this.ws = null;
+    if (connection) {
+      connection.ended = true;
+      this.clearConnectionStableTimer(connection);
     }
     if (this.reconnectTimer) {
-      clearTimeout(this.reconnectTimer);
+      this.clearTimeoutFn(this.reconnectTimer);
       this.reconnectTimer = null;
     }
+    this.reconnectRemainingMs = null;
+    this.reconnectGeneration = null;
+    if (socket) socket.terminate();
     if (this.cleanupTimer) {
       clearInterval(this.cleanupTimer);
       this.cleanupTimer = null;
@@ -106,16 +142,29 @@ class AISService {
   }
 
   logDiagnostics() {
-    console.log(`[ais-diag] 60s summary | Msgs: ${this.diagTotalMsgs} | Queued: ${this.diagQueued} | MemSkipped: ${this.diagMemSkipped} | DB Attempted: ${this.diagDbAttempted} | Inserted: ${this.diagDbSuccess} | DB Skipped: ${this.diagDbSkipped} | Failed: ${this.diagDbFail} | Dropped: ${this.diagDropped}`);
+    console.log(`[ais-diag] 60s summary | Received: ${this.diagTotalMsgs} | Parsed: ${this.diagParsedMsgs} | Malformed: ${this.diagMalformedMsgs} | PositionReports: ${this.diagPosReports} | InvalidPositions: ${this.diagInvalidPos} | RegionAccepted: ${this.diagRegionAccepted} | RegionRejected: ${this.diagRegionRejected} | BatchQueued: ${this.diagBatchQueued} | DB Attempted: ${this.diagDbAttempted} | InsertSucceeded: ${this.diagDbSuccess} | DB Skipped: ${this.diagDbSkipped} | Failed: ${this.diagDbFail} | Dropped: ${this.diagDropped} | MemSkipped: ${this.diagMemSkipped}`);
+    if (this.diagRegionRejected > 0) {
+      console.log(`[ais-diag] Region rejection reasons: ${JSON.stringify(this.diagRegionRejectReasons)}`);
+    }
+    if (this.diagInvalidPos > 0) {
+      console.log(`[ais-diag] Invalid position reasons: ${JSON.stringify(this.diagInvalidPositionReasons)}`);
+    }
     if (this.diagQueued > 0) {
       console.log(`[ais-diag] Regional counts: ${JSON.stringify(this.diagRegionCounts)}`);
     }
 
     // Reset counters for next window
     this.diagTotalMsgs = 0;
+    this.diagParsedMsgs = 0;
+    this.diagMalformedMsgs = 0;
     this.diagPosReports = 0;
     this.diagInvalidPos = 0;
     this.diagQueued = 0;
+    this.diagRegionAccepted = 0;
+    this.diagRegionRejected = 0;
+    this.diagRegionRejectReasons = {};
+    this.diagInvalidPositionReasons = {};
+    this.diagBatchQueued = 0;
     
     this.diagDbAttempted = 0;
     this.diagDbSuccess = 0;
@@ -143,19 +192,54 @@ class AISService {
   }
 
   connect() {
-    if (!this.isActive) return;
-    if (this.ws) {
-      this.ws.close();
-      this.ws = null;
-    }
+    if (!this.isActive || this.ws || this.reconnectTimer) return;
 
     const apiKey = process.env.AISSTREAM_API_KEY;
     const url = process.env.AISSTREAM_URL || 'wss://stream.aisstream.io/v0/stream';
-    this.ws = new WebSocket(url);
+    const socket = new this.WebSocketImpl(url);
+    const connection = {
+      socket,
+      attemptId: ++this.connectionAttemptCounter,
+      generation: this.lifecycleGeneration,
+      ended: false,
+      opened: false,
+      stableTimer: null,
+      retryAfterMs: null,
+      handshakeStatus: null
+    };
+    this.activeConnection = connection;
+    this.ws = socket;
 
-    this.ws.on('open', () => {
-      console.log('[ais] Connected to AISStream.');
-      this.reconnectAttempts = 0;
+    const finishConnection = (reason) => {
+      if (connection.ended) return;
+      connection.ended = true;
+      this.clearConnectionStableTimer(connection);
+      if (this.activeConnection !== connection || connection.generation !== this.lifecycleGeneration) return;
+      this.activeConnection = null;
+      if (this.ws === socket) this.ws = null;
+      this.scheduleReconnect({
+        reason: connection.handshakeStatus
+          ? `HTTP ${connection.handshakeStatus} handshake; ${reason}`
+          : reason,
+        retryAfterMs: connection.retryAfterMs,
+        generation: connection.generation,
+        attemptId: connection.attemptId
+      });
+    };
+
+    socket.on('open', () => {
+      if (!this.isCurrentConnection(connection) || connection.ended || connection.opened) return;
+      connection.opened = true;
+      console.log(`[ais-diag] Connection attempt ${connection.attemptId} (generation ${connection.generation}) socket opened.`);
+      connection.stableTimer = this.setTimeoutFn(() => {
+        if (this.stableTimer === connection.stableTimer) this.stableTimer = null;
+        connection.stableTimer = null;
+        if (this.isCurrentConnection(connection) && !connection.ended) {
+          this.reconnectAttempts = 0;
+          console.log('[ais] Connection stable; reconnect backoff reset.');
+        }
+      }, 30000);
+      this.stableTimer = connection.stableTimer;
       
       let areas = [];
       try {
@@ -190,36 +274,111 @@ class AISService {
       console.log(`[ais] Subscribing to regions: ${regionNames.join(', ')}`);
       
       const subscriptionMessage = {
-        Apikey: apiKey,
+        APIKey: apiKey,
         BoundingBoxes: boundingBoxes,
         FiltersShipMMSI: [],
         FilterMessageTypes: ["PositionReport"]
       };
-      this.ws.send(JSON.stringify(subscriptionMessage));
+      socket.send(JSON.stringify(subscriptionMessage), (err) => {
+        if (!this.isCurrentConnection(connection) || connection.ended) return;
+        if (err) {
+          console.error(`[ais] Connection attempt ${connection.attemptId} subscription send failed (${err.code || 'unclassified'}).`);
+          finishConnection('socket error');
+          socket.terminate();
+        }
+      });
+      console.log(`[ais-diag] Connection attempt ${connection.attemptId} subscription send initiated for ${regionNames.length} regions; awaiting server confirmation.`);
     });
 
-    this.ws.on('message', (data) => {
-      this.processMessage(data);
+    socket.on('message', (data) => {
+      if (!this.isCurrentConnection(connection) || connection.ended) return;
+      this.diagTotalMsgs++;
+      this.processMessage(data, connection);
     });
 
-    this.ws.on('close', () => {
-      this.ws = null;
-      this.scheduleReconnect();
+    socket.on('unexpected-response', (_request, response) => {
+      if (!this.isCurrentConnection(connection) || connection.ended) return;
+      connection.handshakeStatus = response.statusCode;
+      connection.retryAfterMs = this.parseRetryAfter(response.headers && response.headers['retry-after']);
+      const retryAfterParsed = connection.retryAfterMs !== null;
+      const retryDelay = retryAfterParsed
+        ? `calculated delay=${connection.retryAfterMs}ms`
+        : 'calculated delay will use exponential backoff';
+      console.warn(`[ais] Connection attempt ${connection.attemptId} (generation ${connection.generation}) handshake failed with HTTP ${response.statusCode}; Retry-After parsed=${retryAfterParsed ? 'yes' : 'no'}; ${retryDelay}.`);
+      response.resume();
+      socket.terminate();
     });
 
-    this.ws.on('error', (err) => {
-      console.error('[ais] WebSocket error:', err.message);
-      // error will trigger close
+    socket.on('close', (code, reason) => {
+      const closeReason = this.sanitizeDiagnosticText(reason, process.env.AISSTREAM_API_KEY);
+      console.warn(`[ais] Connection attempt ${connection.attemptId} (generation ${connection.generation}) closed; code=${code}; reason="${closeReason || 'none'}".`);
+      finishConnection('socket close');
+    });
+
+    socket.on('error', (err) => {
+      if (!this.isCurrentConnection(connection) || connection.ended) return;
+      console.error(`[ais] Connection attempt ${connection.attemptId} (generation ${connection.generation}) WebSocket error (${err.code || 'unclassified'}).`);
+      finishConnection('socket error');
+      socket.terminate();
     });
   }
 
-  processMessage(data) {
-    this.diagTotalMsgs++;
+  isCurrentConnection(connection) {
+    return this.isActive &&
+      connection.generation === this.lifecycleGeneration &&
+      this.activeConnection === connection &&
+      this.ws === connection.socket;
+  }
+
+  clearConnectionStableTimer(connection) {
+    if (!connection.stableTimer) return;
+    this.clearTimeoutFn(connection.stableTimer);
+    if (this.stableTimer === connection.stableTimer) this.stableTimer = null;
+    connection.stableTimer = null;
+  }
+
+  sanitizeDiagnosticText(value, secret) {
+    let text = Buffer.isBuffer(value) ? value.toString('utf8') : String(value || '');
+    text = text.replace(/[\u0000-\u001f\u007f]/g, ' ');
+    if (secret) text = text.split(secret).join('[redacted]');
+    text = text.replace(/\b(api[\s_-]?key|token|authorization)\b\s*[:=]\s*[^\s,;]+/gi, '$1=[redacted]');
+    return text.trim().slice(0, 120);
+  }
+
+  processMessage(data, connection = null) {
     try {
-      const message = typeof data === 'string' ? JSON.parse(data) : data;
+      let message = data;
+      if (Buffer.isBuffer(data)) {
+        message = JSON.parse(data.toString('utf8'));
+      } else if (Array.isArray(data) && data.every(Buffer.isBuffer)) {
+        message = JSON.parse(Buffer.concat(data).toString('utf8'));
+      } else if (typeof data === 'string') {
+        message = JSON.parse(data);
+      } else if (data instanceof ArrayBuffer) {
+        message = JSON.parse(Buffer.from(data).toString('utf8'));
+      }
+      if (!message || typeof message !== 'object' || Array.isArray(message)) {
+        this.diagMalformedMsgs++;
+        return;
+      }
+      this.diagParsedMsgs++;
+      if (message.MessageType === 'SubscriptionConfirmation') {
+        const compressionEnabled = message.Message &&
+          typeof message.Message.CompressionEnabled === 'boolean'
+          ? message.Message.CompressionEnabled
+          : 'unknown';
+        const attemptId = connection ? connection.attemptId : 'unknown';
+        console.log(`[ais-diag] Connection attempt ${attemptId} subscription confirmed by server; compressionEnabled=${compressionEnabled}.`);
+        return;
+      }
       if (message.MessageType === 'PositionReport') {
         this.diagPosReports++;
-        const report = message.Message.PositionReport || {};
+        if (!message.Message || typeof message.Message !== 'object' ||
+            !message.Message.PositionReport || typeof message.Message.PositionReport !== 'object') {
+          this.diagMalformedMsgs++;
+          return;
+        }
+        const report = message.Message.PositionReport;
         const meta = message.MetaData || {};
         const mmsi = meta.MMSI;
         const lat = report.Latitude;
@@ -229,6 +388,11 @@ class AISService {
         
         if (!time || lat == null || lon == null || !mmsi) {
           this.diagInvalidPos++;
+          const reason = !mmsi ? 'missing MMSI'
+            : lat == null || lon == null ? 'missing coordinates'
+              : 'invalid timestamp';
+          this.diagInvalidPositionReasons[reason] =
+            (this.diagInvalidPositionReasons[reason] || 0) + 1;
           return;
         }
         
@@ -241,8 +405,6 @@ class AISService {
           course = report.Cog;
         }
         
-        this.diagQueued++;
-
         // Update regional counters and filter
         let matchedRegion = false;
         for (const r of this.diagRegions) {
@@ -257,29 +419,78 @@ class AISService {
         }
 
         if (matchedRegion) {
+          this.diagRegionAccepted++;
+          this.diagQueued++;
           this.currentBatch.push({ mmsi, time, lat, lon, speed, course });
           this.scheduleFlush();
+        } else {
+          this.diagRegionRejected++;
+          this.diagRegionRejectReasons['outside configured regions'] =
+            (this.diagRegionRejectReasons['outside configured regions'] || 0) + 1;
         }
       }
     } catch (err) {
-      // Ignore malformed messages silently
+      this.diagMalformedMsgs++;
     }
   }
 
-  scheduleReconnect() {
-    if (!this.isActive) return;
+  parseRetryAfter(value) {
+    if (value == null) return null;
+    const retryValue = String(value).trim();
+    if (!retryValue) return null;
+    if (/^\d+$/.test(retryValue)) {
+      try {
+        return BigInt(retryValue) * 1000n;
+      } catch (err) {
+        return null;
+      }
+    }
+    const httpDatePattern = /^(Mon|Tue|Wed|Thu|Fri|Sat|Sun), \d{2} (Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec) \d{4} \d{2}:\d{2}:\d{2} GMT$/;
+    if (!httpDatePattern.test(retryValue)) return null;
+    const retryAt = Date.parse(retryValue);
+    if (Number.isNaN(retryAt) || new Date(retryAt).toUTCString() !== retryValue) return null;
+    return BigInt(Math.max(0, retryAt - Date.now()));
+  }
+
+  scheduleReconnect({ reason = 'socket close', retryAfterMs = null, generation = this.lifecycleGeneration, attemptId = 'unknown' } = {}) {
+    if (!this.isActive || generation !== this.lifecycleGeneration) return;
     if (this.reconnectTimer) return;
 
-    // Backoff: 5, 10, 20, 40, 60
-    let delay = 5000 * Math.pow(2, this.reconnectAttempts);
-    if (delay > 60000) delay = 60000;
-    
-    console.log(`[ais] Reconnecting in ${delay}ms...`);
-    this.reconnectTimer = setTimeout(() => {
+    this.reconnectAttempts++;
+    const baseDelay = Math.min(1000 * (2 ** Math.min(this.reconnectAttempts - 1, 12)), 300000);
+    const delay = retryAfterMs === null
+      ? BigInt(Math.min(300000, Math.floor(baseDelay * (0.5 + this.random()))))
+      : retryAfterMs;
+    this.reconnectRemainingMs = delay;
+    this.reconnectGeneration = generation;
+    console.log(`[ais] Connection attempt ${attemptId} (generation ${generation}) scheduling reconnect after ${reason} in ${delay}ms.`);
+    this.scheduleReconnectChunk(generation);
+  }
+
+  scheduleReconnectChunk(generation) {
+    if (!this.isActive || generation !== this.lifecycleGeneration || this.reconnectRemainingMs === null) return;
+
+    // Chain safe-sized timers for long Retry-After waits so Node's timeout overflow cannot trigger an early retry.
+    const chunkMs = this.reconnectRemainingMs > MAX_NODE_TIMEOUT_BIGINT
+      ? MAX_NODE_TIMEOUT_BIGINT
+      : this.reconnectRemainingMs;
+    let timer;
+    timer = this.setTimeoutFn(() => {
+      if (this.reconnectTimer !== timer) return;
       this.reconnectTimer = null;
-      this.reconnectAttempts++;
+      if (!this.isActive || generation !== this.lifecycleGeneration) return;
+
+      this.reconnectRemainingMs -= chunkMs;
+      if (this.reconnectRemainingMs > 0n) {
+        this.scheduleReconnectChunk(generation);
+        return;
+      }
+
+      this.reconnectRemainingMs = null;
+      this.reconnectGeneration = null;
       this.connect();
-    }, delay);
+    }, Number(chunkMs));
+    this.reconnectTimer = timer;
   }
 
   scheduleFlush() {
@@ -303,6 +514,8 @@ class AISService {
         for (let i = 0; i < this.currentBatch.length; i += BATCH_LIMIT) {
           this.pendingBatches.push({ items: this.currentBatch.slice(i, i + BATCH_LIMIT), retryCount: 0 });
         }
+        this.diagBatchQueued += this.currentBatch.length;
+        console.debug(`[ais-diag] Batch queued: ${this.currentBatch.length} position(s).`);
         this.currentBatch = [];
       }
       if (this.pendingBatches.length === 0) return;
@@ -310,6 +523,7 @@ class AISService {
       const batchObj = this.pendingBatches[0];
       const batchItems = batchObj.items;
       this.diagDbAttempted += batchItems.length;
+      console.debug(`[ais-diag] Database insert attempted for ${batchItems.length} position(s).`);
 
       const uniqueMap = new Map();
       for (const row of batchItems) {
@@ -336,7 +550,7 @@ class AISService {
           queryParams.push(row.mmsi, row.time, row.lon, row.lat, row.speed, row.course);
         }
 
-        client = await pool.connect();
+        client = await this.pool.connect();
         await client.query('BEGIN');
         
         // Inter-process serialization lock. Note: This lock only protects against cooperating writers.
@@ -360,6 +574,7 @@ class AISService {
         const skipped = deduplicatedItems.length - inserted;
         this.diagDbSuccess += inserted;
         this.diagDbSkipped += skipped;
+        console.debug(`[ais-diag] Database insert succeeded: ${inserted} position(s) inserted.`);
 
         this.pendingBatches.shift();
       } catch (insertError) {
@@ -411,7 +626,7 @@ class AISService {
 
   async cleanup() {
     try {
-      await pool.query(`DELETE FROM live_ais WHERE timestamp < NOW() - INTERVAL '3 days'`);
+      await this.pool.query(`DELETE FROM live_ais WHERE timestamp < NOW() - INTERVAL '3 days'`);
     } catch (err) {
       console.error('[ais] Cleanup error:', err.message);
     }
@@ -419,3 +634,4 @@ class AISService {
 }
 
 module.exports = new AISService();
+module.exports.AISService = AISService;

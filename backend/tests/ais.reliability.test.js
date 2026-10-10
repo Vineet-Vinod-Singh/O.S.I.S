@@ -27,9 +27,16 @@ test.describe('AIS Service Database Reliability', () => {
   });
 
   test.afterEach(async () => {
-    pool.connect = originalConnect;
-    aisService.isActive = false;
-    await aisService.stop();
+    try {
+      aisService.isActive = false;
+      pool.connect = async () => ({
+        query: async () => ({ rowCount: 0 }),
+        release: () => {}
+      });
+      await aisService.stop();
+    } finally {
+      pool.connect = originalConnect;
+    }
   });
 
   test.it('should return early if batch is truly empty', async () => {

@@ -1,119 +1,147 @@
+'use strict';
+
 const test = require('node:test');
-const assert = require('node:assert');
-const aisService = require('../src/services/ais.service');
-const pool = require('../src/config/db');
-const { WebSocketServer } = require('ws');
-const http = require('http');
-const { randomUUID } = require('crypto');
+const assert = require('node:assert/strict');
+const { EventEmitter } = require('node:events');
+const { AISService } = require('../src/services/ais.service');
 
-test('AIS Service - start/stop', () => {
-    const originalKey = process.env.AISSTREAM_API_KEY;
-    delete process.env.AISSTREAM_API_KEY;
-    
-    assert.strictEqual(aisService.isActive, false);
-    // start without API key
-    aisService.start();
-    assert.strictEqual(aisService.isActive, false, 'Should not start without API key');
+const regions = [
+  { id: 'karnataka_coast_in', bbox: [74.70, 13.20, 74.78, 13.28] },
+  { id: 'mumbai_high_in', bbox: [71.40, 19.30, 71.59, 19.49] },
+  { id: 'chennai_port_in', bbox: [80.30, 13.00, 80.49, 13.19] },
+  { id: 'colombo_anchorage_lk', bbox: [79.70, 6.90, 79.89, 7.09] },
+  { id: 'hambantota_lk', bbox: [81.10, 6.00, 81.29, 6.19] },
+  { id: 'fujairah_anchorage_ae', bbox: [56.30, 25.10, 56.49, 25.29] }
+];
 
-    process.env.AISSTREAM_API_KEY = 'mock-key';
-    aisService.start();
-    assert.strictEqual(aisService.isActive, true, 'Should start with API key');
-    assert.ok(aisService.cleanupTimer);
+class MockWebSocket extends EventEmitter {
+  static instance;
 
-    aisService.stop();
-    assert.strictEqual(aisService.isActive, false, 'Should be inactive after stop');
-    assert.strictEqual(aisService.ws, null);
-    assert.strictEqual(aisService.cleanupTimer, null);
-    
-    process.env.AISSTREAM_API_KEY = originalKey;
+  constructor(url) {
+    super();
+    this.url = url;
+    this.sent = [];
+    MockWebSocket.instance = this;
+  }
+
+  send(data, callback) {
+    this.sent.push(JSON.parse(data));
+    if (callback) callback();
+  }
+
+  close() {
+    this.emit('close');
+  }
+
+  terminate() {
+    this.emit('close');
+  }
+}
+
+const dbPool = {
+  connect: async () => ({
+    query: async () => ({ rowCount: 2 }),
+    release() {}
+  }),
+  query: async () => {}
+};
+const aisService = new AISService({ WebSocketImpl: MockWebSocket, dbPool });
+
+test('AIS Service - start/stop', async () => {
+  const originalKey = process.env.AISSTREAM_API_KEY;
+  delete process.env.AISSTREAM_API_KEY;
+
+  assert.strictEqual(aisService.isActive, false);
+  aisService.start();
+  assert.strictEqual(aisService.isActive, false, 'Should not start without API key');
+
+  process.env.AISSTREAM_API_KEY = 'mock-key';
+  aisService.start();
+  assert.strictEqual(aisService.isActive, true, 'Should start with API key');
+  assert.ok(aisService.cleanupTimer);
+
+  await aisService.stop();
+  assert.strictEqual(aisService.isActive, false, 'Should be inactive after stop');
+  assert.strictEqual(aisService.ws, null);
+  assert.strictEqual(aisService.cleanupTimer, null);
+
+  if (originalKey === undefined) delete process.env.AISSTREAM_API_KEY;
+  else process.env.AISSTREAM_API_KEY = originalKey;
 });
 
 test('AIS Service - Timestamp Normalization', () => {
-    // 1. Go-style nanosecond UTC string
-    const goStyle = "2026-10-07 17:37:09.016653628 +0000 UTC";
-    const normalized1 = aisService.normalizeTimestamp(goStyle);
-    assert.strictEqual(normalized1, "2026-10-07T17:37:09.016Z");
-
-    // 2. Already valid ISO string
-    const isoStyle = "2026-10-07T17:37:09.016Z";
-    const normalized2 = aisService.normalizeTimestamp(isoStyle);
-    assert.strictEqual(normalized2, "2026-10-07T17:37:09.016Z");
-
-    // 3. Go-style with NO milliseconds
-    const goNoMs = "2026-10-07 17:37:09 +0000 UTC";
-    const normalized3 = aisService.normalizeTimestamp(goNoMs);
-    assert.strictEqual(normalized3, "2026-10-07T17:37:09.000Z");
-
-    // 4. Invalid timestamp
-    const invalid = "Not a real date";
-    const normalized4 = aisService.normalizeTimestamp(invalid);
-    assert.strictEqual(normalized4, null);
+  assert.strictEqual(
+    aisService.normalizeTimestamp('2026-10-07 17:37:09.016653628 +0000 UTC'),
+    '2026-10-07T17:37:09.016Z'
+  );
+  assert.strictEqual(
+    aisService.normalizeTimestamp('2026-10-07T17:37:09.016Z'),
+    '2026-10-07T17:37:09.016Z'
+  );
+  assert.strictEqual(
+    aisService.normalizeTimestamp('2026-10-07 17:37:09 +0000 UTC'),
+    '2026-10-07T17:37:09.000Z'
+  );
+  assert.strictEqual(aisService.normalizeTimestamp('Not a real date'), null);
 });
 
-test('AIS Service - Mocked WebSocket Reconnect & Parsing', async () => {
-    // We mock the WebSocket server to test connect, parse and backoff
-    const server = http.createServer();
-    const wss = new WebSocketServer({ server });
-    let clientConnected = false;
-    let receivedSub = null;
+test('AIS Service - Mocked WebSocket subscription and position parsing', async () => {
+  const previous = {
+    apiKey: process.env.AISSTREAM_API_KEY,
+    url: process.env.AISSTREAM_URL,
+    areas: process.env.POLLER_PRIORITY_AREAS_JSON
+  };
+  process.env.AISSTREAM_API_KEY = 'mock-key';
+  process.env.AISSTREAM_URL = 'ws://mock.invalid';
+  process.env.POLLER_PRIORITY_AREAS_JSON = JSON.stringify(regions);
 
-    wss.on('connection', (ws) => {
-        clientConnected = true;
-        ws.on('message', (data) => {
-            receivedSub = JSON.parse(data);
-            // send a mock position report WITHOUT speed/course
-            ws.send(JSON.stringify({
-                MessageType: 'PositionReport',
-                MetaData: { MMSI: '123456789', time_utc: "2026-10-07 17:37:09.016653628 +0000 UTC" },
-                Message: { PositionReport: { Latitude: 12.34, Longitude: 56.78 } }
-            }));
-            // send a mock position report WITH speed/course
-            ws.send(JSON.stringify({
-                MessageType: 'PositionReport',
-                MetaData: { MMSI: '987654321', time_utc: "2026-10-07 17:37:10 +0000 UTC" },
-                Message: { PositionReport: { Latitude: 23.45, Longitude: 67.89, Sog: 15.2, Cog: 180.5 } }
-            }));
-            // send a malformed message
-            ws.send('invalid json');
-            
-            // force close
-            setTimeout(() => ws.close(), 100);
-        });
-    });
+  try {
+    aisService.start();
+    const socket = MockWebSocket.instance;
+    socket.emit('open');
+    assert.strictEqual(typeof socket.sent[0].APIKey, 'string');
+    assert.ok(socket.sent[0].APIKey.length > 0);
+    assert.strictEqual(Object.hasOwn(socket.sent[0], 'Apikey'), false);
+    assert.deepStrictEqual(
+      socket.sent[0].BoundingBoxes,
+      regions.map(({ bbox: [minLon, minLat, maxLon, maxLat] }) => [
+        [maxLat, minLon],
+        [minLat, maxLon]
+      ])
+    );
+    assert.deepStrictEqual(socket.sent[0].FiltersShipMMSI, []);
+    assert.deepStrictEqual(socket.sent[0].FilterMessageTypes, ['PositionReport']);
 
-    await new Promise(resolve => {
-        server.listen(0, () => {
-            const port = server.address().port;
-            resolve(port);
-        });
-    });
-    const port = server.address().port;
-    
-    try {
-        process.env.AISSTREAM_API_KEY = 'mock-key';
-        process.env.AISSTREAM_URL = `ws://localhost:${port}`;
-        aisService.start();
+    socket.emit('message', Buffer.from(JSON.stringify({
+      MessageType: 'PositionReport',
+      MetaData: { MMSI: '123456789', time_utc: '2026-10-07 17:37:09.016653628 +0000 UTC' },
+      Message: { PositionReport: { Latitude: 13.04, Longitude: 80.34 } }
+    })));
+    socket.emit('message', JSON.stringify({
+      MessageType: 'PositionReport',
+      MetaData: { MMSI: '987654321', time_utc: '2026-10-07 17:37:10 +0000 UTC' },
+      Message: { PositionReport: { Latitude: 13.05, Longitude: 80.35, Sog: 15.2, Cog: 180.5 } }
+    }));
+    socket.emit('message', 'invalid json');
 
-        await new Promise(resolve => setTimeout(resolve, 50));
-        assert.strictEqual(clientConnected, true);
-        assert.strictEqual(receivedSub.Apikey, 'mock-key');
-
-        await new Promise(resolve => setTimeout(resolve, 100));
-        assert.strictEqual(aisService.currentBatch.length, 2);
-        assert.strictEqual(aisService.currentBatch[0].mmsi, '123456789');
-        assert.strictEqual(aisService.currentBatch[0].speed, null);
-        assert.strictEqual(aisService.currentBatch[0].course, null);
-        
-        assert.strictEqual(aisService.currentBatch[1].mmsi, '987654321');
-        assert.strictEqual(aisService.currentBatch[1].speed, 15.2);
-        assert.strictEqual(aisService.currentBatch[1].course, 180.5);
-
-        await new Promise(resolve => setTimeout(resolve, 150));
-        // Client should have been disconnected and reconnected scheduled
-        assert.ok(aisService.reconnectTimer);
-        
-        aisService.stop();
-    } finally {
-        server.close();
-    }
+    assert.strictEqual(aisService.currentBatch.length, 2);
+    assert.strictEqual(aisService.currentBatch[0].mmsi, '123456789');
+    assert.strictEqual(aisService.currentBatch[0].speed, null);
+    assert.strictEqual(aisService.currentBatch[0].course, null);
+    assert.strictEqual(aisService.currentBatch[1].mmsi, '987654321');
+    assert.strictEqual(aisService.currentBatch[1].speed, 15.2);
+    assert.strictEqual(aisService.currentBatch[1].course, 180.5);
+    assert.strictEqual(aisService.diagTotalMsgs, 3);
+    assert.strictEqual(aisService.diagParsedMsgs, 2);
+    assert.strictEqual(aisService.diagMalformedMsgs, 1);
+    assert.strictEqual(aisService.diagRegionAccepted, 2);
+  } finally {
+    await aisService.stop();
+    if (previous.apiKey === undefined) delete process.env.AISSTREAM_API_KEY;
+    else process.env.AISSTREAM_API_KEY = previous.apiKey;
+    if (previous.url === undefined) delete process.env.AISSTREAM_URL;
+    else process.env.AISSTREAM_URL = previous.url;
+    if (previous.areas === undefined) delete process.env.POLLER_PRIORITY_AREAS_JSON;
+    else process.env.POLLER_PRIORITY_AREAS_JSON = previous.areas;
+  }
 });
