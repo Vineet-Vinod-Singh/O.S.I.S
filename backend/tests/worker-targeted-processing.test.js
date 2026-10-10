@@ -25,8 +25,7 @@ const originals = {
 };
 
 function makeScene(id, scene_id, acquired_at) {
-  const [minLon, minLat, maxLon, maxLat] = poller.AOI_BBOX;
-  return { id, scene_id, collection: 'sentinel-1-grd', status: 'queued', bbox: [minLon - 1, minLat - 1, maxLon + 1, maxLat + 1], acquired_at, polarization: ['VV', 'VH'], platform: 'S1A', orbit_direction: 'ASCENDING', stac_feature: null };
+  return { id, scene_id, collection: 'sentinel-1-grd', status: 'queued', bbox: [0, 0, 0.1, 0.1], acquired_at, polarization: ['VV', 'VH'], platform: 'S1A', orbit_direction: 'ASCENDING', stac_feature: null };
 }
 
 pool.connect = async () => {

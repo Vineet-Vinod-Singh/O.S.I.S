@@ -5,10 +5,17 @@ import subprocess
 from pathlib import Path
 import numpy as np
 import pytest
+import importlib.util
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
-import importlib
-m = importlib.import_module("hybrid-spill-detector")
+HAS_ML = importlib.util.find_spec("torch") is not None
+pytestmark = pytest.mark.skipif(not HAS_ML, reason="Requires existing .venv-ml dependencies")
+
+if HAS_ML:
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
+    import importlib
+    m = importlib.import_module("hybrid-spill-detector")
+else:
+    m = None
 
 def test_fully_water_candidate():
     """1. fully water candidate -> accepted"""

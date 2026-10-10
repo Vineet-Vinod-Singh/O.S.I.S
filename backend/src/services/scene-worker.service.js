@@ -30,6 +30,7 @@ const pool = require('../config/db');
 const sentinel = require('./sentinel.service');
 const incidentService = require('./incident.service');
 const poller = require('./scene-poller.service');
+const retention = require('./retention.service');
 
 // ---------------------------------------------------------------------------
 // Configuration
@@ -266,6 +267,7 @@ async function ensureSceneDir(sceneId) {
   }
 
   await fs.mkdir(sceneDir, { recursive: true });
+  await retention.markForRetention(sceneDir, 'osis-worker-v1');
   return sceneDir;
 }
 
@@ -528,11 +530,7 @@ async function processClaimedScene(scene) {
     }
     return { claimed: true, sceneId: scene.scene_id, status: 'failed', error: safeMsg };
   } finally {
-    try {
-      await fs.rm(sceneDir, { recursive: true, force: true });
-    } catch (cleanupErr) {
-      console.error(`[worker] Failed to cleanup scene directory ${sceneDir}:`, cleanupErr.message);
-    }
+    // Active retention lifecycle replaces immediate cleanup
   }
 }
 
@@ -602,6 +600,15 @@ async function _tick() {
       }
     } catch (recErr) {
       console.warn('[worker] Periodic stale recovery failed (non-fatal):', String(recErr.message).slice(0, 200));
+    }
+
+    try {
+      const cleaned = await retention.cleanupStaleArtifacts(SCENES_DIR, '');
+      if (cleaned.deleted > 0) {
+        console.log(`[worker] Periodic cleanup removed ${cleaned.deleted} stale artifacts`);
+      }
+    } catch (cleanupErr) {
+      console.warn('[worker] Periodic cleanup failed (non-fatal):', String(cleanupErr.message).slice(0, 200));
     }
 
     await processNextScene();

@@ -5,6 +5,10 @@ const path = require('node:path');
 const { randomUUID } = require('node:crypto');
 const limits = require('./resource-limits');
 const sentinel = require('./sentinel.service');
+const retention = require('./retention.service');
+
+retention.scheduleCleanup(os.tmpdir(), 'osis-cdse-');
+retention.scheduleCleanup(os.tmpdir(), 'osis-upload-');
 
 const emptyScene = (mode, acquiredAt = '') => ({
     id: `${mode.toLowerCase()}-${randomUUID()}`,
@@ -23,7 +27,8 @@ async function upload(body, metadata) {
     const scene = emptyScene('UPLOAD');
     let directory;
     const cleanup = async () => {
-        if (directory) await fs.rm(directory, { recursive: true, force: true });
+        if (directory) retention.unregisterActiveDirectory(directory);
+        // Active retention lifecycle replaces immediate cleanup
     };
     try {
         if (!metadata || Buffer.byteLength(metadata) > 4096)
@@ -132,6 +137,8 @@ async function upload(body, metadata) {
                 'Operator declares SAR; authenticity and timestamp not independently verified',
         });
         directory = await fs.mkdtemp(path.join(os.tmpdir(), 'osis-upload-'));
+        retention.registerActiveDirectory(directory);
+        await retention.markForRetention(directory, 'osis-upload-v1');
         const paths = {
             vv: path.join(directory, 'vv.tif'),
             vh: path.join(directory, 'vh.tif'),
@@ -172,6 +179,7 @@ async function onDemand(entry) {
         source: 'cdse_sentinel1',
     };
     if (cache && cache.expires <= Date.now()) {
+        if (cache.directory) retention.unregisterActiveDirectory(cache.directory);
         await fs.rm(cache.directory, { recursive: true, force: true });
         cache = null;
     }
@@ -181,6 +189,7 @@ async function onDemand(entry) {
             await fs.access(cache.paths.vh);
             return { _scene: cache.scene, _paths: cache.paths };
         } catch {
+            if (cache.directory) retention.unregisterActiveDirectory(cache.directory);
             await fs.rm(cache.directory, { recursive: true, force: true });
             cache = null;
         }
@@ -204,27 +213,8 @@ async function onDemand(entry) {
     lastAttempt = Date.now();
     let directory;
     try {
-        // Expire only directories created by this adapter with its ownership marker.
-        for (const name of (await fs.readdir(os.tmpdir())).filter((n) =>
-            /^osis-cdse-[A-Za-z0-9]{6}$/.test(n),
-        )) {
-            const stale = path.join(os.tmpdir(), name);
-            try {
-                const marker = JSON.parse(
-                    await fs.readFile(
-                        path.join(stale, 'osis-cache.json'),
-                        'utf8',
-                    ),
-                );
-                if (
-                    marker.owner === 'osis-cdse-v1' &&
-                    marker.expires < Date.now()
-                )
-                    await fs.rm(stale, { recursive: true, force: true });
-            } catch {
-                /* Do not remove unrecognized directories. */
-            }
-        }
+        await retention.cleanupStaleArtifacts(os.tmpdir(), 'osis-cdse-');
+        await retention.cleanupStaleArtifacts(os.tmpdir(), 'osis-upload-');
         const date = entry.acquiredAt.slice(0, 10);
         const catalog = await sentinel.searchCatalog({
             bbox: entry.bbox,
@@ -243,13 +233,8 @@ async function onDemand(entry) {
                 'Selected acquisition not returned by bounded catalog search',
             );
         directory = await fs.mkdtemp(path.join(os.tmpdir(), 'osis-cdse-'));
-        await fs.writeFile(
-            path.join(directory, 'osis-cache.json'),
-            JSON.stringify({
-                owner: 'osis-cdse-v1',
-                expires: Date.now() + 3600000,
-            }),
-        );
+        retention.registerActiveDirectory(directory);
+        await retention.markForRetention(directory, 'osis-cdse-v1');
         const paths = {};
         // Two sequential AOI-cropped outputs for ONE acquisition; never a SAFE archive.
         for (const pol of ['vv', 'vh']) {
@@ -276,13 +261,18 @@ async function onDemand(entry) {
         };
         const owned = directory;
         const timer = setTimeout(() => {
-            if (cache?.directory === owned) cache = null;
-            fs.rm(owned, { recursive: true, force: true }).catch(() => {});
+            if (cache?.directory === owned) {
+                retention.unregisterActiveDirectory(owned);
+                cache = null;
+            }
         }, 3600000);
         timer.unref();
         return { _scene: scene, _paths: paths };
     } catch {
-        if (directory) await fs.rm(directory, { recursive: true, force: true });
+        if (directory) {
+            retention.unregisterActiveDirectory(directory);
+            await fs.rm(directory, { recursive: true, force: true });
+        }
         return {
             _scene: scene,
             _unavailable:

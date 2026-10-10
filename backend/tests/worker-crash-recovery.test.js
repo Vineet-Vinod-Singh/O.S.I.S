@@ -10,6 +10,7 @@ const fs = require('node:fs/promises');
 // Mock fs to prevent saving reports locally and polluting
 const originalWriteFile = fs.writeFile;
 const originalRename = fs.rename;
+const originalReaddir = fs.readdir;
 fs.writeFile = async (file, data, opts) => {
     if (String(file).includes('incidents')) return;
     return originalWriteFile(file, data, opts);
@@ -17,6 +18,10 @@ fs.writeFile = async (file, data, opts) => {
 fs.rename = async (oldPath, newPath) => {
     if (String(newPath).includes('incidents')) return;
     return originalRename(oldPath, newPath);
+};
+fs.readdir = async (dir, opts) => {
+    if (String(dir).includes('incidents') || String(dir).includes('reports')) return [];
+    return originalReaddir(dir, opts);
 };
 
 // Mock child_process spawn
@@ -62,7 +67,7 @@ test('idempotent incident persistence across worker crash simulation', async () 
 
     const sceneResult = await pool.query(`
         INSERT INTO processed_scenes (scene_id, collection, status, acquired_at, bbox)
-        VALUES ($1, 'sentinel-1-grd', 'queued', '2026-10-08T00:00:00Z', '[0,0,1,1]'::jsonb)
+        VALUES ($1, 'sentinel-1-grd', 'queued', '2026-10-08T00:00:00Z', '[0,0,0.1,0.1]'::jsonb)
         RETURNING id
     `, [sceneId]);
     const dbSceneId = sceneResult.rows[0].id;
@@ -107,7 +112,7 @@ test('normal first-time processing', async () => {
     
     const sceneResult = await pool.query(`
         INSERT INTO processed_scenes (scene_id, collection, status, acquired_at, bbox)
-        VALUES ($1, 'sentinel-1-grd', 'queued', '2026-10-08T00:00:00Z', '[0,0,1,1]'::jsonb)
+        VALUES ($1, 'sentinel-1-grd', 'queued', '2026-10-08T00:00:00Z', '[0,0,0.1,0.1]'::jsonb)
         RETURNING id
     `, [sceneId]);
     const dbSceneId = sceneResult.rows[0].id;
@@ -127,5 +132,6 @@ after(async () => {
     sentinel.getSentinel1GrdImage = originalGetSentinel1GrdImage;
     fs.writeFile = originalWriteFile;
     fs.rename = originalRename;
+    fs.readdir = originalReaddir;
 });
 
