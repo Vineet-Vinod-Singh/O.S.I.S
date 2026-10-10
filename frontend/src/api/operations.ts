@@ -39,7 +39,7 @@ export interface IngestionStatusResponse {
   };
   db: {
     sceneCounts: Record<string, number>;
-    checkpoint: any;
+    checkpoint: Record<string, unknown> | null;
   };
 }
 
