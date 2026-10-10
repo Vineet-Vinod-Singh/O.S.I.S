@@ -1,9 +1,4 @@
-import {
-  useEffect,
-  useState,
-  type ComponentType,
-  type ReactNode,
-} from "react";
+import { useEffect, useState, type ComponentType, type ReactNode } from "react";
 import { createClientOnlyFn } from "@tanstack/react-start";
 import type { LeafletMapProps } from "./leaflet-types";
 
@@ -56,7 +51,6 @@ function getClientModule(): Promise<LeafletClientModule> | null {
   if (typeof window === "undefined") return null;
   return loadClientModule();
 }
-
 
 export function OceanMap(props: OceanMapProps) {
   const [ClientMap, setClientMap] = useState<ComponentType<LeafletMapProps> | null>(null);
@@ -248,11 +242,7 @@ export function MapRectangle(props: {
   const label = props["aria-label"] ?? props.title;
   if (label) {
     return (
-      <div
-        aria-label={label}
-        title={props.title ?? label}
-        style={{ display: "none" }}
-      >
+      <div aria-label={label} title={props.title ?? label} style={{ display: "none" }}>
         {label}
       </div>
     );
@@ -315,4 +305,3 @@ export function MapImageOverlay(props: {
 export const DEFAULT_TILE_URL = "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png";
 export const DEFAULT_TILE_ATTRIBUTION =
   '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">OpenStreetMap</a> contributors';
-

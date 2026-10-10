@@ -82,7 +82,8 @@ function SuspectsPage() {
             Candidate Vessel Attribution
           </h1>
           <p className="text-sm text-muted-foreground">
-            No active incident loaded. Select an incident from the header dropdown or run an analysis from the Investigation page.
+            No active incident loaded. Select an incident from the header dropdown or run an
+            analysis from the Investigation page.
           </p>
         </div>
         <Panel className="flex flex-col items-center justify-center p-12 text-center space-y-4">

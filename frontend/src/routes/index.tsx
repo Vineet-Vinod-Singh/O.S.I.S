@@ -64,12 +64,12 @@ function LandingPage() {
       <div
         aria-hidden="true"
         style={{
-          position: 'fixed',
+          position: "fixed",
           inset: 0,
           zIndex: -1,
-          pointerEvents: 'none',
-          overflow: 'hidden',
-          backgroundColor: '#02070E',
+          pointerEvents: "none",
+          overflow: "hidden",
+          backgroundColor: "#02070E",
         }}
       >
         {/* Layer 1: Cinematic Ocean & Distant Tanker Environment Image */}
@@ -79,54 +79,54 @@ function LandingPage() {
           aria-hidden="true"
           className="landing-bg-img"
           style={{
-            position: 'absolute',
+            position: "absolute",
             inset: 0,
-            width: '100%',
-            height: '100%',
-            objectFit: 'cover',
-            objectPosition: '52% 24%',
-            filter: 'contrast(1.08) brightness(0.96) saturate(1.06)',
+            width: "100%",
+            height: "100%",
+            objectFit: "cover",
+            objectPosition: "52% 24%",
+            filter: "contrast(1.08) brightness(0.96) saturate(1.06)",
           }}
         />
 
         {/* Layer 2: Deep Blue Atmospheric Maritime Color Grading */}
         <div
           style={{
-            position: 'absolute',
+            position: "absolute",
             inset: 0,
             background:
-              'linear-gradient(180deg, rgba(3, 14, 24, 0.22) 0%, rgba(2, 9, 18, 0.12) 42%, rgba(2, 8, 15, 0.52) 100%)',
-            mixBlendMode: 'multiply',
+              "linear-gradient(180deg, rgba(3, 14, 24, 0.22) 0%, rgba(2, 9, 18, 0.12) 42%, rgba(2, 8, 15, 0.52) 100%)",
+            mixBlendMode: "multiply",
           }}
         />
 
         {/* Layer 3: Ambient Oceanic Depth Tint */}
         <div
           style={{
-            position: 'absolute',
+            position: "absolute",
             inset: 0,
             background:
-              'radial-gradient(ellipse 110% 85% at 55% 25%, rgba(6, 36, 58, 0.15) 0%, rgba(3, 17, 28, 0.32) 55%, rgba(2, 7, 14, 0.65) 100%)',
+              "radial-gradient(ellipse 110% 85% at 55% 25%, rgba(6, 36, 58, 0.15) 0%, rgba(3, 17, 28, 0.32) 55%, rgba(2, 7, 14, 0.65) 100%)",
           }}
         />
 
         {/* Layer 4: Left-Side Dark Gradient for Hero Typography Readability (Ocean visible beneath) */}
         <div
           style={{
-            position: 'absolute',
+            position: "absolute",
             inset: 0,
             background:
-              'linear-gradient(90deg, rgba(3, 8, 15, 0.76) 0%, rgba(3, 8, 15, 0.58) 35%, rgba(3, 8, 15, 0.2) 60%, transparent 80%)',
+              "linear-gradient(90deg, rgba(3, 8, 15, 0.76) 0%, rgba(3, 8, 15, 0.58) 35%, rgba(3, 8, 15, 0.2) 60%, transparent 80%)",
           }}
         />
 
         {/* Layer 5: SAR Visualization Panel Integration Darkening */}
         <div
           style={{
-            position: 'absolute',
+            position: "absolute",
             inset: 0,
             background:
-              'radial-gradient(ellipse 70% 55% at 78% 46%, rgba(3, 14, 24, 0.28) 0%, transparent 75%)',
+              "radial-gradient(ellipse 70% 55% at 78% 46%, rgba(3, 14, 24, 0.28) 0%, transparent 75%)",
           }}
         />
 
@@ -138,16 +138,16 @@ function LandingPage() {
           xmlns="http://www.w3.org/2000/svg"
           preserveAspectRatio="none"
           style={{
-            position: 'absolute',
+            position: "absolute",
             top: 0,
             left: 0,
-            width: '200%',
-            height: '100%',
+            width: "200%",
+            height: "100%",
             opacity: 0.55,
             maskImage:
-              'radial-gradient(ellipse 65% 65% at 50% 42%, transparent 20%, rgba(0,0,0,0.45) 55%, black 100%)',
+              "radial-gradient(ellipse 65% 65% at 50% 42%, transparent 20%, rgba(0,0,0,0.45) 55%, black 100%)",
             WebkitMaskImage:
-              'radial-gradient(ellipse 65% 65% at 50% 42%, transparent 20%, rgba(0,0,0,0.45) 55%, black 100%)',
+              "radial-gradient(ellipse 65% 65% at 50% 42%, transparent 20%, rgba(0,0,0,0.45) 55%, black 100%)",
           }}
         >
           <defs>
@@ -297,11 +297,11 @@ function LandingPage() {
         {/* Layer 7: Atmospheric perimeter vignette & bottom section grounding */}
         <div
           style={{
-            position: 'absolute',
+            position: "absolute",
             inset: 0,
             background:
-              'radial-gradient(ellipse 95% 85% at 50% 50%, transparent 55%, rgba(2, 6, 12, 0.35) 80%, rgba(1, 4, 8, 0.78) 100%), ' +
-              'linear-gradient(180deg, transparent 65%, rgba(7, 11, 16, 0.45) 85%, rgba(7, 11, 16, 0.95) 100%)',
+              "radial-gradient(ellipse 95% 85% at 50% 50%, transparent 55%, rgba(2, 6, 12, 0.35) 80%, rgba(1, 4, 8, 0.78) 100%), " +
+              "linear-gradient(180deg, transparent 65%, rgba(7, 11, 16, 0.45) 85%, rgba(7, 11, 16, 0.95) 100%)",
           }}
         />
       </div>
@@ -388,8 +388,8 @@ function LandingPage() {
                 maxWidth: 480,
               }}
             >
-              Satellite SAR, ocean-drift modelling and AIS vessel intelligence
-              unified for oil-spill investigation.
+              Satellite SAR, ocean-drift modelling and AIS vessel intelligence unified for oil-spill
+              investigation.
             </p>
 
             {/* CTA row */}
@@ -481,7 +481,8 @@ function LandingPage() {
               background: "rgba(9, 15, 23, 0.72)",
               backdropFilter: "blur(14px)",
               WebkitBackdropFilter: "blur(14px)",
-              boxShadow: "0 12px 40px -10px rgba(0, 0, 0, 0.7), inset 0 1px 0 rgba(25, 181, 230, 0.15)",
+              boxShadow:
+                "0 12px 40px -10px rgba(0, 0, 0, 0.7), inset 0 1px 0 rgba(25, 181, 230, 0.15)",
               overflow: "hidden",
             }}
             className="landing-hero-visual"
@@ -546,8 +547,26 @@ function LandingPage() {
               />
 
               {/* ── Lat/Lon reference lines ── */}
-              <line x1="0" y1="200" x2="500" y2="200" stroke="#1D2A36" strokeWidth="0.5" strokeDasharray="4 8" opacity="0.4" />
-              <line x1="250" y1="0" x2="250" y2="450" stroke="#1D2A36" strokeWidth="0.5" strokeDasharray="4 8" opacity="0.4" />
+              <line
+                x1="0"
+                y1="200"
+                x2="500"
+                y2="200"
+                stroke="#1D2A36"
+                strokeWidth="0.5"
+                strokeDasharray="4 8"
+                opacity="0.4"
+              />
+              <line
+                x1="250"
+                y1="0"
+                x2="250"
+                y2="450"
+                stroke="#1D2A36"
+                strokeWidth="0.5"
+                strokeDasharray="4 8"
+                opacity="0.4"
+              />
 
               {/* ════════════════════════════════════════
                   LAYER 1: VESSEL TRAJECTORIES (background)
@@ -605,11 +624,28 @@ function LandingPage() {
 
               {/* Origin uncertainty radius */}
               <circle cx="195" cy="210" r="28" fill="url(#originGrad)" />
-              <circle cx="195" cy="210" r="28" fill="none" stroke="#F5B82E" strokeWidth="0.8" strokeDasharray="3 3" opacity="0.4" />
+              <circle
+                cx="195"
+                cy="210"
+                r="28"
+                fill="none"
+                stroke="#F5B82E"
+                strokeWidth="0.8"
+                strokeDasharray="3 3"
+                opacity="0.4"
+              />
 
               {/* Origin point */}
               <circle cx="195" cy="210" r="4" fill="#F5B82E" />
-              <circle cx="195" cy="210" r="7" fill="none" stroke="#F5B82E" strokeWidth="1" opacity="0.5" />
+              <circle
+                cx="195"
+                cy="210"
+                r="7"
+                fill="none"
+                stroke="#F5B82E"
+                strokeWidth="1"
+                opacity="0.5"
+              />
 
               {/* ════════════════════════════════════════
                   LAYER 4: OIL SPILL DETECTION REGION
@@ -631,7 +667,16 @@ function LandingPage() {
                 stroke="none"
               />
               {/* Spill pulse ring */}
-              <circle cx="315" cy="370" r="18" fill="none" stroke="#FF4D6D" strokeWidth="0.8" opacity="0.35" className="landing-spill-pulse" />
+              <circle
+                cx="315"
+                cy="370"
+                r="18"
+                fill="none"
+                stroke="#FF4D6D"
+                strokeWidth="0.8"
+                opacity="0.35"
+                className="landing-spill-pulse"
+              />
 
               {/* ════════════════════════════════════════
                   LAYER 5: VESSEL MARKERS
@@ -641,13 +686,29 @@ function LandingPage() {
               <g>
                 {/* Ship icon — small triangle */}
                 <polygon points="188,158 184,165 192,165" fill="#19B5E6" opacity="0.85" />
-                <circle cx="188" cy="161" r="8" fill="none" stroke="#19B5E6" strokeWidth="0.7" opacity="0.3" />
+                <circle
+                  cx="188"
+                  cy="161"
+                  r="8"
+                  fill="none"
+                  stroke="#19B5E6"
+                  strokeWidth="0.7"
+                  opacity="0.3"
+                />
               </g>
 
               {/* Vessel 2 — secondary, passes nearby */}
               <g>
                 <polygon points="240,225 236,232 244,232" fill="#19B5E6" opacity="0.6" />
-                <circle cx="240" cy="228" r="7" fill="none" stroke="#19B5E6" strokeWidth="0.6" opacity="0.2" />
+                <circle
+                  cx="240"
+                  cy="228"
+                  r="7"
+                  fill="none"
+                  stroke="#19B5E6"
+                  strokeWidth="0.6"
+                  opacity="0.2"
+                />
               </g>
 
               {/* Vessel 3 — further away, weaker signal */}
@@ -661,39 +722,135 @@ function LandingPage() {
 
               {/* SAR DETECTION label — near spill */}
               <g>
-                <rect x="340" y="343" width="86" height="18" rx="3" fill="#0A1018" fillOpacity="0.85" stroke="#FF4D6D" strokeWidth="0.6" opacity="0.8" />
-                <text x="383" y="355" textAnchor="middle" fill="#FF4D6D" fontSize="8" fontFamily="ui-monospace, SFMono-Regular, monospace" letterSpacing="0.1em" opacity="0.9">
+                <rect
+                  x="340"
+                  y="343"
+                  width="86"
+                  height="18"
+                  rx="3"
+                  fill="#0A1018"
+                  fillOpacity="0.85"
+                  stroke="#FF4D6D"
+                  strokeWidth="0.6"
+                  opacity="0.8"
+                />
+                <text
+                  x="383"
+                  y="355"
+                  textAnchor="middle"
+                  fill="#FF4D6D"
+                  fontSize="8"
+                  fontFamily="ui-monospace, SFMono-Regular, monospace"
+                  letterSpacing="0.1em"
+                  opacity="0.9"
+                >
                   SAR DETECTION
                 </text>
               </g>
 
               {/* EST. ORIGIN label */}
               <g>
-                <rect x="130" y="188" width="54" height="16" rx="3" fill="#0A1018" fillOpacity="0.85" stroke="#F5B82E" strokeWidth="0.5" opacity="0.7" />
-                <text x="157" y="199" textAnchor="middle" fill="#F5B82E" fontSize="7" fontFamily="ui-monospace, SFMono-Regular, monospace" letterSpacing="0.1em" opacity="0.85">
+                <rect
+                  x="130"
+                  y="188"
+                  width="54"
+                  height="16"
+                  rx="3"
+                  fill="#0A1018"
+                  fillOpacity="0.85"
+                  stroke="#F5B82E"
+                  strokeWidth="0.5"
+                  opacity="0.7"
+                />
+                <text
+                  x="157"
+                  y="199"
+                  textAnchor="middle"
+                  fill="#F5B82E"
+                  fontSize="7"
+                  fontFamily="ui-monospace, SFMono-Regular, monospace"
+                  letterSpacing="0.1em"
+                  opacity="0.85"
+                >
                   EST. ORIGIN
                 </text>
               </g>
 
               {/* DRIFT BACKTRACK label — along path */}
               <g>
-                <text x="228" y="290" fill="#F5B82E" fontSize="7" fontFamily="ui-monospace, SFMono-Regular, monospace" letterSpacing="0.08em" opacity="0.5" transform="rotate(-52, 228, 290)">
+                <text
+                  x="228"
+                  y="290"
+                  fill="#F5B82E"
+                  fontSize="7"
+                  fontFamily="ui-monospace, SFMono-Regular, monospace"
+                  letterSpacing="0.08em"
+                  opacity="0.5"
+                  transform="rotate(-52, 228, 290)"
+                >
                   DRIFT BACKTRACK
                 </text>
               </g>
 
               {/* AIS CORRELATION label — near vessels cluster */}
               <g>
-                <rect x="100" y="135" width="80" height="16" rx="3" fill="#0A1018" fillOpacity="0.8" stroke="#19B5E6" strokeWidth="0.5" opacity="0.6" />
-                <text x="140" y="146" textAnchor="middle" fill="#19B5E6" fontSize="7" fontFamily="ui-monospace, SFMono-Regular, monospace" letterSpacing="0.1em" opacity="0.7">
+                <rect
+                  x="100"
+                  y="135"
+                  width="80"
+                  height="16"
+                  rx="3"
+                  fill="#0A1018"
+                  fillOpacity="0.8"
+                  stroke="#19B5E6"
+                  strokeWidth="0.5"
+                  opacity="0.6"
+                />
+                <text
+                  x="140"
+                  y="146"
+                  textAnchor="middle"
+                  fill="#19B5E6"
+                  fontSize="7"
+                  fontFamily="ui-monospace, SFMono-Regular, monospace"
+                  letterSpacing="0.1em"
+                  opacity="0.7"
+                >
                   AIS CORRELATION
                 </text>
               </g>
 
               {/* Vessel IDs */}
-              <text x="197" y="155" fill="#19B5E6" fontSize="6.5" fontFamily="ui-monospace, SFMono-Regular, monospace" opacity="0.5">V-01</text>
-              <text x="248" y="224" fill="#19B5E6" fontSize="6.5" fontFamily="ui-monospace, SFMono-Regular, monospace" opacity="0.4">V-02</text>
-              <text x="240" y="209" fill="#19B5E6" fontSize="6.5" fontFamily="ui-monospace, SFMono-Regular, monospace" opacity="0.3">V-03</text>
+              <text
+                x="197"
+                y="155"
+                fill="#19B5E6"
+                fontSize="6.5"
+                fontFamily="ui-monospace, SFMono-Regular, monospace"
+                opacity="0.5"
+              >
+                V-01
+              </text>
+              <text
+                x="248"
+                y="224"
+                fill="#19B5E6"
+                fontSize="6.5"
+                fontFamily="ui-monospace, SFMono-Regular, monospace"
+                opacity="0.4"
+              >
+                V-02
+              </text>
+              <text
+                x="240"
+                y="209"
+                fill="#19B5E6"
+                fontSize="6.5"
+                fontFamily="ui-monospace, SFMono-Regular, monospace"
+                opacity="0.3"
+              >
+                V-03
+              </text>
             </svg>
 
             {/* ── Corner metadata overlays (HTML for crisp rendering) ── */}
@@ -823,8 +980,8 @@ function LandingPage() {
                 marginTop: 16,
               }}
             >
-              From satellite acquisition to actionable attribution — four
-              autonomous stages, one unified report.
+              From satellite acquisition to actionable attribution — four autonomous stages, one
+              unified report.
             </p>
           </div>
 
@@ -953,8 +1110,8 @@ function LandingPage() {
               marginTop: 14,
             }}
           >
-            Access the full operational dashboard with live incident data,
-            SAR detection, drift analysis, and vessel attribution.
+            Access the full operational dashboard with live incident data, SAR detection, drift
+            analysis, and vessel attribution.
           </p>
           <Link
             to="/overview"

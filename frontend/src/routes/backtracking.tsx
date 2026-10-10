@@ -78,7 +78,8 @@ function BacktrackingPage() {
             Lagrangian Drift Simulation
           </h1>
           <p className="text-sm text-muted-foreground">
-            No active incident loaded. Select an incident from the header dropdown or run an analysis from the Investigation page.
+            No active incident loaded. Select an incident from the header dropdown or run an
+            analysis from the Investigation page.
           </p>
         </div>
         <Panel className="flex flex-col items-center justify-center p-12 text-center space-y-4">
@@ -127,10 +128,13 @@ function BacktrackingPage() {
           ]
         : [15.25, 72.45];
 
-
   // Derive human-readable environmental variables
-  const currentSpeed = environment["current_speed"] ?? environment["current_velocity"] ?? environment["surface_current_mps"];
-  const windSpeed = environment["wind_speed"] ?? environment["wind_speed_mps"] ?? environment["wind_velocity"];
+  const currentSpeed =
+    environment["current_speed"] ??
+    environment["current_velocity"] ??
+    environment["surface_current_mps"];
+  const windSpeed =
+    environment["wind_speed"] ?? environment["wind_speed_mps"] ?? environment["wind_velocity"];
   const waveHeight = environment["wave_height"] ?? environment["significant_wave_height_m"];
 
   return (
@@ -146,7 +150,8 @@ function BacktrackingPage() {
             Spill Drift Modeling &amp; Trajectory
           </h1>
           <p className="text-xs text-muted-foreground pt-0.5">
-            What happens if we track the spill backward to its source, or forward to predict its spread?
+            What happens if we track the spill backward to its source, or forward to predict its
+            spread?
           </p>
         </div>
         <OutcomeBadge outcome={outcome ?? report.status} />
@@ -162,7 +167,8 @@ function BacktrackingPage() {
           <p className="text-muted-foreground">
             {isNoSpill
               ? "Hydrodynamic drift backtracking is not executed when no oil spill is detected on the surface."
-              : report.outcomeMessage || "Drift analysis inconclusive due to indeterminate surface spill geometry."}
+              : report.outcomeMessage ||
+                "Drift analysis inconclusive due to indeterminate surface spill geometry."}
           </p>
           {report.outcomeReason && (
             <p className="text-muted-foreground/80 italic">{report.outcomeReason}</p>
@@ -267,15 +273,16 @@ function BacktrackingPage() {
                           : "border-cyan-400"
                       }`}
                     />
-                    <span>
-                      {direction === "backward" ? "Reverse Drift Path" : "Forecast Path"}
-                    </span>
+                    <span>{direction === "backward" ? "Reverse Drift Path" : "Forecast Path"}</span>
                   </div>
                 )}
                 {point && (
                   <div className="flex items-center gap-2">
                     <span className="inline-block h-2.5 w-2.5 rounded-full bg-white" />
-                    <span>Scrubbed Position (t = {point.hours > 0 ? `+${point.hours.toFixed(0)}` : point.hours.toFixed(0)}h)</span>
+                    <span>
+                      Scrubbed Position (t ={" "}
+                      {point.hours > 0 ? `+${point.hours.toFixed(0)}` : point.hours.toFixed(0)}h)
+                    </span>
                   </div>
                 )}
               </div>
@@ -357,7 +364,10 @@ function BacktrackingPage() {
               <div className="flex items-baseline justify-between text-xs">
                 <span className="uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
                   <Clock className="h-3.5 w-3.5 text-primary" />
-                  <span>Timeline Scrubber ({direction === "backward" ? "Reverse Hours" : "Forecast Hours"})</span>
+                  <span>
+                    Timeline Scrubber (
+                    {direction === "backward" ? "Reverse Hours" : "Forecast Hours"})
+                  </span>
                 </span>
                 <span className="font-bold text-foreground tabular-nums">
                   {point
@@ -381,8 +391,18 @@ function BacktrackingPage() {
               <div className="flex justify-between text-[11px] text-muted-foreground">
                 <span>t = 0h (Satellite Detection)</span>
                 {activePath[MAX_IDX] && (
-                  <span className={direction === "backward" ? "text-[var(--accent-amber)] font-medium" : "text-cyan-400 font-medium"}>
-                    t = {activePath[MAX_IDX].hours > 0 ? `+${activePath[MAX_IDX].hours.toFixed(0)}` : activePath[MAX_IDX].hours.toFixed(0)}h ({direction === "backward" ? "Origin" : "End Forecast"})
+                  <span
+                    className={
+                      direction === "backward"
+                        ? "text-[var(--accent-amber)] font-medium"
+                        : "text-cyan-400 font-medium"
+                    }
+                  >
+                    t ={" "}
+                    {activePath[MAX_IDX].hours > 0
+                      ? `+${activePath[MAX_IDX].hours.toFixed(0)}`
+                      : activePath[MAX_IDX].hours.toFixed(0)}
+                    h ({direction === "backward" ? "Origin" : "End Forecast"})
                   </span>
                 )}
               </div>
@@ -426,7 +446,9 @@ function BacktrackingPage() {
         <div className="space-y-5 font-mono">
           {/* Origin / Spread Target Card */}
           <Panel
-            title={direction === "backward" ? "Estimated Origin Region" : "Spread Forecast Telemetry"}
+            title={
+              direction === "backward" ? "Estimated Origin Region" : "Spread Forecast Telemetry"
+            }
             badge={
               <span className="rounded bg-secondary/80 px-1.5 py-0.2 text-[9px] font-mono text-muted-foreground uppercase">
                 {direction === "backward" ? "Source Cell" : "Advection Vector"}
@@ -449,7 +471,8 @@ function BacktrackingPage() {
                   <div className="rounded border border-amber-500/30 bg-amber-500/5 p-2.5 text-[11px] text-amber-200/90 flex items-start gap-2">
                     <ShieldAlert className="h-4 w-4 shrink-0 text-amber-400 mt-0.5" />
                     <span>
-                      Sensitivity radius represents hydrodynamic dispersion uncertainty, not a definitive legal boundary.
+                      Sensitivity radius represents hydrodynamic dispersion uncertainty, not a
+                      definitive legal boundary.
                     </span>
                   </div>
                 </div>
@@ -464,13 +487,17 @@ function BacktrackingPage() {
                 <KeyVal k="Simulation Steps" v={`${forwardPath.length} intervals`} />
                 {point && (
                   <>
-                    <KeyVal k="Step Coordinates" v={`${point.lat.toFixed(4)}°N, ${point.lon.toFixed(4)}°E`} />
+                    <KeyVal
+                      k="Step Coordinates"
+                      v={`${point.lat.toFixed(4)}°N, ${point.lon.toFixed(4)}°E`}
+                    />
                     <KeyVal k="Step Timestamp" v={utc(point.timestamp)} />
                     <KeyVal k="Step Dispersion" v={`±${point.uncertaintyKm} km`} />
                   </>
                 )}
                 <div className="rounded border border-cyan-500/30 bg-cyan-500/5 p-2.5 text-[11px] text-cyan-200/90">
-                  Forward advection forecasts trajectory under prevailing CMEMS currents and wind forcing.
+                  Forward advection forecasts trajectory under prevailing CMEMS currents and wind
+                  forcing.
                 </div>
               </div>
             )}
@@ -504,7 +531,9 @@ function BacktrackingPage() {
               </div>
               <div className="flex items-center justify-between border-b border-border/50 pb-2">
                 <span className="text-muted-foreground">Advection Integration</span>
-                <span className="font-semibold text-foreground font-mono">4th-order Runge-Kutta</span>
+                <span className="font-semibold text-foreground font-mono">
+                  4th-order Runge-Kutta
+                </span>
               </div>
               <div className="flex items-center justify-between">
                 <span className="text-muted-foreground">Windage Leeway</span>
@@ -539,8 +568,8 @@ function BacktrackingPage() {
           <Panel title="Attribution Workflow">
             <div className="space-y-2 text-xs text-muted-foreground">
               <p className="leading-relaxed">
-                The computed release origin and temporal release window directly constrain
-                the spatiotemporal search corridor for AIS vessel correlation.
+                The computed release origin and temporal release window directly constrain the
+                spatiotemporal search corridor for AIS vessel correlation.
               </p>
               <Link
                 to="/ais"

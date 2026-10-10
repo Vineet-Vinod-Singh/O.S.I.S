@@ -11,7 +11,14 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 
 const root = fileURLToPath(new URL("..", import.meta.url));
-let directory, ReportView, getDetectionPresentation, getReportExportPayload, demo, partial, noSpill, inconclusive;
+let directory,
+  ReportView,
+  getDetectionPresentation,
+  getReportExportPayload,
+  demo,
+  partial,
+  noSpill,
+  inconclusive;
 const render = (report) => renderToStaticMarkup(createElement(ReportView, { report }));
 
 before(async () => {
@@ -31,7 +38,9 @@ before(async () => {
     await writeFile(filePath, item.code);
   }
   const entry = output.find((item) => item.isEntry);
-  ({ ReportView, getDetectionPresentation, getReportExportPayload } = await import(pathToFileURL(path.join(directory, entry.fileName)).href));
+  ({ ReportView, getDetectionPresentation, getReportExportPayload } = await import(
+    pathToFileURL(path.join(directory, entry.fileName)).href
+  ));
   const pipeline = (name, input, env = {}) => {
     const child = spawnSync(
       process.env.PYTHON_PATH || "python",

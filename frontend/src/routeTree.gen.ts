@@ -15,6 +15,7 @@ import { Route as AnalysisRouteImport } from './routes/analysis'
 import { Route as BacktrackingRouteImport } from './routes/backtracking'
 import { Route as OperationsRouteImport } from './routes/operations'
 import { Route as OverviewRouteImport } from './routes/overview'
+import { Route as QaRouteImport } from './routes/qa'
 import { Route as RiskRouteImport } from './routes/risk'
 import { Route as SatelliteRouteImport } from './routes/satellite'
 import { Route as SuspectsRouteImport } from './routes/suspects'
@@ -49,6 +50,11 @@ const OverviewRoute = OverviewRouteImport.update({
   path: '/overview',
   getParentRoute: () => rootRouteImport,
 } as any)
+const QaRoute = QaRouteImport.update({
+  id: '/qa',
+  path: '/qa',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const RiskRoute = RiskRouteImport.update({
   id: '/risk',
   path: '/risk',
@@ -72,6 +78,7 @@ export interface FileRoutesByFullPath {
   '/backtracking': typeof BacktrackingRoute
   '/operations': typeof OperationsRoute
   '/overview': typeof OverviewRoute
+  '/qa': typeof QaRoute
   '/risk': typeof RiskRoute
   '/satellite': typeof SatelliteRoute
   '/suspects': typeof SuspectsRoute
@@ -83,6 +90,7 @@ export interface FileRoutesByTo {
   '/backtracking': typeof BacktrackingRoute
   '/operations': typeof OperationsRoute
   '/overview': typeof OverviewRoute
+  '/qa': typeof QaRoute
   '/risk': typeof RiskRoute
   '/satellite': typeof SatelliteRoute
   '/suspects': typeof SuspectsRoute
@@ -95,6 +103,7 @@ export interface FileRoutesById {
   '/backtracking': typeof BacktrackingRoute
   '/operations': typeof OperationsRoute
   '/overview': typeof OverviewRoute
+  '/qa': typeof QaRoute
   '/risk': typeof RiskRoute
   '/satellite': typeof SatelliteRoute
   '/suspects': typeof SuspectsRoute
@@ -108,6 +117,7 @@ export interface FileRouteTypes {
     | '/backtracking'
     | '/operations'
     | '/overview'
+    | '/qa'
     | '/risk'
     | '/satellite'
     | '/suspects'
@@ -119,6 +129,7 @@ export interface FileRouteTypes {
     | '/backtracking'
     | '/operations'
     | '/overview'
+    | '/qa'
     | '/risk'
     | '/satellite'
     | '/suspects'
@@ -130,6 +141,7 @@ export interface FileRouteTypes {
     | '/backtracking'
     | '/operations'
     | '/overview'
+    | '/qa'
     | '/risk'
     | '/satellite'
     | '/suspects'
@@ -142,6 +154,7 @@ export interface RootRouteChildren {
   BacktrackingRoute: typeof BacktrackingRoute
   OperationsRoute: typeof OperationsRoute
   OverviewRoute: typeof OverviewRoute
+  QaRoute: typeof QaRoute
   RiskRoute: typeof RiskRoute
   SatelliteRoute: typeof SatelliteRoute
   SuspectsRoute: typeof SuspectsRoute
@@ -191,6 +204,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof OverviewRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/qa': {
+      id: '/qa'
+      path: '/qa'
+      fullPath: '/qa'
+      preLoaderRoute: typeof QaRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/risk': {
       id: '/risk'
       path: '/risk'
@@ -222,6 +242,7 @@ const rootRouteChildren: RootRouteChildren = {
   BacktrackingRoute: BacktrackingRoute,
   OperationsRoute: OperationsRoute,
   OverviewRoute: OverviewRoute,
+  QaRoute: QaRoute,
   RiskRoute: RiskRoute,
   SatelliteRoute: SatelliteRoute,
   SuspectsRoute: SuspectsRoute,

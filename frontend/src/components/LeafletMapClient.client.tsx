@@ -184,9 +184,7 @@ function MapStatusFooter() {
   useMapEvents({
     zoomend: () => setZoom(map.getZoom()),
     mousemove: (e) => {
-      setCursorCoords(
-        `${e.latlng.lat.toFixed(2)}°N, ${e.latlng.lng.toFixed(2)}°E`
-      );
+      setCursorCoords(`${e.latlng.lat.toFixed(2)}°N, ${e.latlng.lng.toFixed(2)}°E`);
     },
     mouseout: () => setCursorCoords(null),
   });
@@ -194,7 +192,8 @@ function MapStatusFooter() {
   return (
     <div className="flex items-end justify-between text-[11px] text-muted-foreground font-mono">
       <span className="pointer-events-auto rounded bg-card/95 px-2 py-0.5 border border-border">
-        Arabian Sea Sector {cursorCoords ? `· Cursor: ${cursorCoords}` : "· Drag to pan · Scroll to zoom"}
+        Arabian Sea Sector{" "}
+        {cursorCoords ? `· Cursor: ${cursorCoords}` : "· Drag to pan · Scroll to zoom"}
       </span>
       <span className="pointer-events-auto rounded bg-card/95 px-2 py-0.5 tabular-nums border border-border text-[var(--accent-blue)]">
         ZOOM {zoom}
@@ -218,14 +217,8 @@ export function LeafletMapClient({
   className = "",
 }: LeafletMapProps) {
   const targetCenter = center ?? initialCenter;
-  const normCenter = useMemo(
-    () => normalizeLatLng(targetCenter),
-    [targetCenter]
-  );
-  const normZoom = useMemo(
-    () => normalizeZoom(initialZoom),
-    [initialZoom]
-  );
+  const normCenter = useMemo(() => normalizeLatLng(targetCenter), [targetCenter]);
+  const normZoom = useMemo(() => normalizeZoom(initialZoom), [initialZoom]);
 
   return (
     <div
@@ -240,17 +233,9 @@ export function LeafletMapClient({
         className="h-full w-full osis-leaflet-map"
         style={{ height: "100%", width: "100%", background: "var(--map-bg)" }}
       >
-        <TileLayer
-          url={tileUrl}
-          attribution={tileAttribution}
-          maxZoom={18}
-        />
+        <TileLayer url={tileUrl} attribution={tileAttribution} maxZoom={18} />
         <MapViewController center={normCenter} zoom={normZoom} bounds={bounds} />
-        <MapControlsOverlay
-          initialCenter={normCenter}
-          initialZoom={normZoom}
-          legend={legend}
-        />
+        <MapControlsOverlay initialCenter={normCenter} initialZoom={normZoom} legend={legend} />
         {children}
       </MapContainer>
     </div>
@@ -292,7 +277,7 @@ export function MapMarker({
 
   const icon = useMemo(
     () => createTacticalIcon({ color, label, active, pulse }),
-    [color, label, active, pulse]
+    [color, label, active, pulse],
   );
 
   const markerProps: any = {

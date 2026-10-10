@@ -59,13 +59,13 @@ export interface WorkerStatusResponse {
 }
 
 export const getIngestionQueue = (status = "all", limit = 50, offset = 0) =>
-  apiClient<IngestionQueueResponse>(`/api/ingestion/queue?status=${status}&limit=${limit}&offset=${offset}`);
+  apiClient<IngestionQueueResponse>(
+    `/api/ingestion/queue?status=${status}&limit=${limit}&offset=${offset}`,
+  );
 
-export const getIngestionStatus = () =>
-  apiClient<IngestionStatusResponse>("/api/ingestion/status");
+export const getIngestionStatus = () => apiClient<IngestionStatusResponse>("/api/ingestion/status");
 
-export const getWorkerStatus = () =>
-  apiClient<WorkerStatusResponse>("/api/worker/status");
+export const getWorkerStatus = () => apiClient<WorkerStatusResponse>("/api/worker/status");
 
 export const replayScene = (sceneId: string) =>
   apiClient("/api/ingestion/replay", {

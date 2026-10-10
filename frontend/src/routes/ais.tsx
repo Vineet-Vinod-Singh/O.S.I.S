@@ -88,13 +88,15 @@ function AisPage() {
             AIS Spatiotemporal Vessel Correlation
           </h1>
           <p className="text-sm text-muted-foreground">
-            No active incident loaded. Select an incident from the header dropdown or run an analysis from the Investigation page.
+            No active incident loaded. Select an incident from the header dropdown or run an
+            analysis from the Investigation page.
           </p>
         </div>
         <Panel className="flex flex-col items-center justify-center p-12 text-center space-y-4">
           <p className="text-sm font-medium text-foreground">No active incident analysis</p>
           <p className="text-xs text-muted-foreground max-w-sm">
-            Load an incident to correlate AIS vessel tracks against the estimated spill release corridor.
+            Load an incident to correlate AIS vessel tracks against the estimated spill release
+            corridor.
           </p>
           <Link
             to="/analysis"
@@ -145,7 +147,6 @@ function AisPage() {
           ]
         : [15.25, 72.45];
 
-
   return (
     <div className="space-y-6">
       {/* 1. SECTION HEADER */}
@@ -187,7 +188,8 @@ function AisPage() {
           <p className="text-muted-foreground">
             {isNoSpill
               ? "AIS vessel correlation is not performed when no oil spill is detected on the water."
-              : report.outcomeMessage || "AIS vessel correlation inconclusive due to uncertain release origin window."}
+              : report.outcomeMessage ||
+                "AIS vessel correlation inconclusive due to uncertain release origin window."}
           </p>
         </div>
       )}
@@ -199,7 +201,9 @@ function AisPage() {
             <span>No Compatible Vessel Identified</span>
           </div>
           <p className="text-muted-foreground">
-            No AIS transponder tracks intersected the modeled origin region (±{origin?.uncertaintyKm ?? 5} km) during the estimated release window ({utc(origin?.releaseWindow.start ?? "")} – {utc(origin?.releaseWindow.end ?? "")}).
+            No AIS transponder tracks intersected the modeled origin region (±
+            {origin?.uncertaintyKm ?? 5} km) during the estimated release window (
+            {utc(origin?.releaseWindow.start ?? "")} – {utc(origin?.releaseWindow.end ?? "")}).
           </p>
         </div>
       )}
@@ -447,7 +451,8 @@ function AisPage() {
           <Panel title="Next Stage">
             <div className="space-y-2 text-xs">
               <p className="text-muted-foreground leading-relaxed">
-                Review complete analytical findings, evidence chain, and limitation audit on the final Investigation dashboard.
+                Review complete analytical findings, evidence chain, and limitation audit on the
+                final Investigation dashboard.
               </p>
               <Link
                 to="/analysis"
@@ -492,7 +497,8 @@ function AisPage() {
         >
           <div className="space-y-4">
             <p className="text-xs text-muted-foreground">
-              Candidate vessels evaluated across physical proximity to the modeled origin, temporal coincidence, AIS broadcast continuity, and vessel classification priors.
+              Candidate vessels evaluated across physical proximity to the modeled origin, temporal
+              coincidence, AIS broadcast continuity, and vessel classification priors.
             </p>
 
             <div className="overflow-x-auto">
@@ -524,9 +530,13 @@ function AisPage() {
                         onClick={() => select(c.mmsi)}
                       >
                         <td className="py-3 pr-4">
-                          <span className={`inline-flex items-center justify-center rounded px-2 py-0.5 text-xs font-bold font-mono ${
-                            isTop ? "bg-amber-500/20 text-amber-300 border border-amber-500/30" : "bg-secondary text-foreground border border-border"
-                          }`}>
+                          <span
+                            className={`inline-flex items-center justify-center rounded px-2 py-0.5 text-xs font-bold font-mono ${
+                              isTop
+                                ? "bg-amber-500/20 text-amber-300 border border-amber-500/30"
+                                : "bg-secondary text-foreground border border-border"
+                            }`}
+                          >
                             #{c.rank}
                           </span>
                         </td>
@@ -557,17 +567,35 @@ function AisPage() {
                           </div>
                         </td>
                         <td className="py-3 pr-4 tabular-nums">
-                          <span className={c.closestDistanceKm < 5 ? "text-emerald-400 font-semibold" : "text-foreground"}>
+                          <span
+                            className={
+                              c.closestDistanceKm < 5
+                                ? "text-emerald-400 font-semibold"
+                                : "text-foreground"
+                            }
+                          >
                             {c.closestDistanceKm.toFixed(1)} km
                           </span>
                         </td>
                         <td className="py-3 pr-4 tabular-nums">
-                          <span className={c.timeDifferenceHours < 3 ? "text-emerald-400 font-semibold" : "text-foreground"}>
+                          <span
+                            className={
+                              c.timeDifferenceHours < 3
+                                ? "text-emerald-400 font-semibold"
+                                : "text-foreground"
+                            }
+                          >
                             {c.timeDifferenceHours.toFixed(1)} h
                           </span>
                         </td>
                         <td className="py-3 pr-4 tabular-nums">
-                          <span className={c.aisContinuity < 0.8 ? "text-amber-400 font-semibold" : "text-foreground"}>
+                          <span
+                            className={
+                              c.aisContinuity < 0.8
+                                ? "text-amber-400 font-semibold"
+                                : "text-foreground"
+                            }
+                          >
                             {(c.aisContinuity * 100).toFixed(0)}%
                           </span>
                         </td>

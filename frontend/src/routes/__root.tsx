@@ -95,35 +95,32 @@ function ErrorComponent({ error, reset }: { error: Error; reset: () => void }) {
   );
 }
 
-export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
-  {
-    head: () => ({
-      meta: [
-        { charSet: "utf-8" },
-        { name: "viewport", content: "width=device-width, initial-scale=1" },
-        {
-          title:
-            "O.S.I.S. — Oil Spill Identification & Source Attribution System",
-        },
-        {
-          name: "description",
-          content:
-            "Satellite SAR oil spill detection with hydrodynamic Lagrangian drift backtracking and AIS vessel attribution.",
-        },
-        { property: "og:type", content: "website" },
-        { name: "twitter:card", content: "summary_large_image" },
-      ],
-      links: [
-        { rel: "stylesheet", href: appCss },
-        { rel: "icon", href: "/favicon.ico", type: "image/x-icon" },
-      ],
-    }),
-    shellComponent: RootShell,
-    component: RootComponent,
-    notFoundComponent: NotFoundComponent,
-    errorComponent: ErrorComponent,
-  },
-);
+export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()({
+  head: () => ({
+    meta: [
+      { charSet: "utf-8" },
+      { name: "viewport", content: "width=device-width, initial-scale=1" },
+      {
+        title: "O.S.I.S. — Oil Spill Identification & Source Attribution System",
+      },
+      {
+        name: "description",
+        content:
+          "Satellite SAR oil spill detection with hydrodynamic Lagrangian drift backtracking and AIS vessel attribution.",
+      },
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary_large_image" },
+    ],
+    links: [
+      { rel: "stylesheet", href: appCss },
+      { rel: "icon", href: "/favicon.ico", type: "image/x-icon" },
+    ],
+  }),
+  shellComponent: RootShell,
+  component: RootComponent,
+  notFoundComponent: NotFoundComponent,
+  errorComponent: ErrorComponent,
+});
 
 function RootShell({ children }: { children: ReactNode }) {
   return (
@@ -152,7 +149,14 @@ function RootComponent() {
 }
 
 function IncidentSelector() {
-  const { activeReport, history, historyLoading, setActiveReportId, autoLoading, isSwitchingIncident } = useIncident();
+  const {
+    activeReport,
+    history,
+    historyLoading,
+    setActiveReportId,
+    autoLoading,
+    isSwitchingIncident,
+  } = useIncident();
   const [open, setOpen] = useState(false);
 
   const currentLabel = activeReport ? getIncidentLabel(activeReport) : "No incident selected";
@@ -172,7 +176,9 @@ function IncidentSelector() {
         onClick={() => setOpen(!open)}
         className="inline-flex items-center gap-2 rounded border border-border bg-secondary/80 px-3 py-1.5 text-xs font-mono text-foreground hover:bg-secondary transition-colors"
       >
-        <span className="text-muted-foreground text-[10px] uppercase tracking-wider">Incident:</span>
+        <span className="text-muted-foreground text-[10px] uppercase tracking-wider">
+          Incident:
+        </span>
         {autoLoading || historyLoading || isSwitchingIncident ? (
           <span className="flex items-center gap-1.5">
             <Loader2 className="h-3 w-3 animate-spin" />
@@ -199,10 +205,14 @@ function IncidentSelector() {
                 const latest = items[0];
                 if (!latest) return null;
                 const isActive = activeReport?.id === latest.id;
-                const outcomeLabel = latest.outcome === "SPILL_DETECTED" ? "✓ Spill Detected"
-                  : latest.outcome === "NO_SPILL_DETECTED" ? "✓ No Spill"
-                  : latest.outcome === "ANALYSIS_INCONCLUSIVE" ? "⚠ Inconclusive"
-                  : latest.status;
+                const outcomeLabel =
+                  latest.outcome === "SPILL_DETECTED"
+                    ? "✓ Spill Detected"
+                    : latest.outcome === "NO_SPILL_DETECTED"
+                      ? "✓ No Spill"
+                      : latest.outcome === "ANALYSIS_INCONCLUSIVE"
+                        ? "⚠ Inconclusive"
+                        : latest.status;
                 const modeLabel = latest.mode ?? "DEMO";
 
                 return (
@@ -230,7 +240,10 @@ function IncidentSelector() {
                       <span>{latest.detectedAt.slice(0, 16).replace("T", " ")}</span>
                     </div>
                     {latest.sceneId && (
-                      <div className="mt-1 text-[9px] font-mono text-muted-foreground truncate opacity-70" title={latest.sceneId}>
+                      <div
+                        className="mt-1 text-[9px] font-mono text-muted-foreground truncate opacity-70"
+                        title={latest.sceneId}
+                      >
                         {latest.sceneId}
                       </div>
                     )}
@@ -273,18 +286,19 @@ function RootLayout() {
         <div
           aria-hidden="true"
           style={{
-            position: 'fixed',
+            position: "fixed",
             inset: 0,
             zIndex: -1,
-            pointerEvents: 'none',
-            background: 'linear-gradient(180deg, #02070E 0%, #041424 35%, #03101C 70%, #01060B 100%)',
+            pointerEvents: "none",
+            background:
+              "linear-gradient(180deg, #02070E 0%, #041424 35%, #03101C 70%, #01060B 100%)",
           }}
         />
         <div className="relative min-h-screen flex flex-col">
           {/* Minimal landing header */}
           <header
             className="sticky top-0 z-40 border-b border-border"
-            style={{ backgroundColor: 'var(--header)' }}
+            style={{ backgroundColor: "var(--header)" }}
           >
             <div className="mx-auto flex max-w-7xl items-center justify-between px-6 py-3">
               <Link to="/" className="group flex items-center gap-3">
@@ -325,7 +339,10 @@ function RootLayout() {
       <div className="om-stars" aria-hidden="true" />
       <div className="relative min-h-screen flex flex-col">
         {/* Main Header */}
-        <header className="sticky top-0 z-40 border-b border-border" style={{ backgroundColor: 'var(--header)' }}>
+        <header
+          className="sticky top-0 z-40 border-b border-border"
+          style={{ backgroundColor: "var(--header)" }}
+        >
           <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-y-3 px-6 py-3">
             {/* Left brand */}
             <Link to="/" className="group flex items-center gap-3">
@@ -365,9 +382,7 @@ function RootLayout() {
             <nav className="mx-auto flex max-w-7xl items-center gap-0 px-6">
               {NAV.map((n) => {
                 const Icon = n.icon;
-                const isActive = n.exact
-                  ? currentPath === n.to
-                  : currentPath.startsWith(n.to);
+                const isActive = n.exact ? currentPath === n.to : currentPath.startsWith(n.to);
                 return (
                   <Link
                     key={n.to}
@@ -401,14 +416,18 @@ function RootLayout() {
         </main>
 
         {/* Footer */}
-        <footer className="border-t border-border/60 py-3.5 px-6 text-[11px] text-muted-foreground/80 font-mono" style={{ backgroundColor: 'var(--header)' }}>
+        <footer
+          className="border-t border-border/60 py-3.5 px-6 text-[11px] text-muted-foreground/80 font-mono"
+          style={{ backgroundColor: "var(--header)" }}
+        >
           <div className="mx-auto max-w-7xl flex flex-wrap items-center justify-between gap-3">
             <div>
               <span className="text-muted-foreground">O.S.I.S.</span>
               <span className="text-muted-foreground/50"> · </span>
               <span>SIH PS26143</span>
               <span className="hidden md:inline text-muted-foreground/50">
-                {" "}· Analytical evidence only, not legal attribution
+                {" "}
+                · Analytical evidence only, not legal attribution
               </span>
             </div>
             <div className="flex items-center gap-4 text-[11px]">

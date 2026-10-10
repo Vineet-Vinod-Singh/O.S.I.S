@@ -1,6 +1,12 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
-import { OceanMap, Marker, MapRectangle, MapImageOverlay, MapGeoJSON } from "../components/OceanMap";
+import {
+  OceanMap,
+  Marker,
+  MapRectangle,
+  MapImageOverlay,
+  MapGeoJSON,
+} from "../components/OceanMap";
 
 import { KeyVal, Modal, OutcomeBadge, Panel, Stat, StatusDot } from "../components/ui-kit";
 import { useIncident } from "../context/IncidentContext";
@@ -119,7 +125,8 @@ function SatellitePage() {
             SAR Detection Analysis
           </h1>
           <p className="text-sm text-muted-foreground">
-            No active incident loaded. Select an incident from the header dropdown or run an analysis from the Investigation page.
+            No active incident loaded. Select an incident from the header dropdown or run an
+            analysis from the Investigation page.
           </p>
         </div>
         <Panel className="flex flex-col items-center justify-center p-12 text-center space-y-4">
@@ -176,7 +183,6 @@ function SatellitePage() {
     : scene.bbox
       ? [(scene.bbox[1] + scene.bbox[3]) / 2, (scene.bbox[0] + scene.bbox[2]) / 2]
       : [15.25, 72.45];
-
 
   return (
     <div className="space-y-6">
@@ -249,7 +255,7 @@ function SatellitePage() {
             </div>
             <p className="text-xs text-muted-foreground max-w-3xl">
               {isSpillDetected
-                ? `Sentinel-1 SAR backscatter analysis resolved a distinct low-backscatter dark anomaly measuring ${(spill.maskAreaKm2 ?? spill.metrics.areaKm2)} km² with ${(spill.confidence * 100).toFixed(0)}% algorithmic confidence.`
+                ? `Sentinel-1 SAR backscatter analysis resolved a distinct low-backscatter dark anomaly measuring ${spill.maskAreaKm2 ?? spill.metrics.areaKm2} km² with ${(spill.confidence * 100).toFixed(0)}% algorithmic confidence.`
                 : isNoSpill
                   ? "Sentinel-1 SAR scene backscatter analysis verified normal oceanic capillary wave roughness with no anomalous dark slicks meeting threshold criteria."
                   : report.outcomeMessage ||
@@ -266,7 +272,9 @@ function SatellitePage() {
             <div className="flex items-center gap-4 text-right">
               <div>
                 <div className="text-[10px] uppercase text-muted-foreground">Area</div>
-                <div className="text-base font-bold text-foreground">{(spill.maskAreaKm2 ?? spill.metrics.areaKm2)} km²</div>
+                <div className="text-base font-bold text-foreground">
+                  {spill.maskAreaKm2 ?? spill.metrics.areaKm2} km²
+                </div>
               </div>
               <div>
                 <div className="text-[10px] uppercase text-muted-foreground">Confidence</div>
@@ -336,14 +344,20 @@ function SatellitePage() {
                     {isKarnataka && (
                       <MapImageOverlay
                         url={karnatakaImageUrl}
-                        bounds={[[south, west], [north, east]]}
+                        bounds={[
+                          [south, west],
+                          [north, east],
+                        ]}
                         opacity={0.85}
                       />
                     )}
                     <MapRectangle
                       aria-label="Analyzed scene footprint"
                       title="Analyzed scene footprint"
-                      bounds={[[south, west], [north, east]]}
+                      bounds={[
+                        [south, west],
+                        [north, east],
+                      ]}
                       pathOptions={{
                         color: "#38bdf8",
                         weight: 1.5,
@@ -374,7 +388,7 @@ function SatellitePage() {
               <Marker
                 lat={spill.metrics.centroid.lat}
                 lon={spill.metrics.centroid.lon}
-                label={`Slick Centroid (${(spill.maskAreaKm2 ?? spill.metrics.areaKm2)} km²)`}
+                label={`Slick Centroid (${spill.maskAreaKm2 ?? spill.metrics.areaKm2} km²)`}
                 pulse
               />
             )}
@@ -408,7 +422,7 @@ function SatellitePage() {
                 <div className="grid grid-cols-2 gap-3">
                   <Stat
                     label="Slick Area"
-                    value={`${(spill.maskAreaKm2 ?? spill.metrics.areaKm2)} km²`}
+                    value={`${spill.maskAreaKm2 ?? spill.metrics.areaKm2} km²`}
                     hint="Segmented surface"
                     highlight="cyan"
                   />
@@ -535,11 +549,10 @@ function SatellitePage() {
                   <p className="text-foreground font-semibold">
                     Real Sentinel-1A SAR Observation (19 June 2024)
                   </p>
-                  <p>
-                    Sensor: Sentinel-1A C-band SAR (IW mode) off Karnataka coast.
-                  </p>
+                  <p>Sensor: Sentinel-1A C-band SAR (IW mode) off Karnataka coast.</p>
                   <p className="text-[10px] text-muted-foreground/80">
-                    Note: Numerical floating-point matrix archived in source GeoTIFF (512×512 native); calibrated radiometric visualization rendered above.
+                    Note: Numerical floating-point matrix archived in source GeoTIFF (512×512
+                    native); calibrated radiometric visualization rendered above.
                   </p>
                 </div>
               </div>
@@ -550,7 +563,8 @@ function SatellitePage() {
                   <span>Insufficient / Unavailable SAR Evidence</span>
                 </div>
                 <p className="text-muted-foreground text-[11px]">
-                  SAR backscatter coverage in this synthetic scenario is absent (0% valid ocean pixels).
+                  SAR backscatter coverage in this synthetic scenario is absent (0% valid ocean
+                  pixels).
                 </p>
                 <div className="rounded bg-secondary/50 p-2 text-[10px] text-muted-foreground text-left space-y-0.5">
                   <p>• Coverage status: Absent / Below quality threshold</p>
@@ -627,7 +641,10 @@ function SatellitePage() {
               k="Centroid Coordinates"
               v={`${spill.metrics.centroid.lat.toFixed(5)}° N, ${spill.metrics.centroid.lon.toFixed(5)}° E`}
             />
-            <KeyVal k="Spill Surface Area" v={`${(spill.maskAreaKm2 ?? spill.metrics.areaKm2)} km²`} />
+            <KeyVal
+              k="Spill Surface Area"
+              v={`${spill.maskAreaKm2 ?? spill.metrics.areaKm2} km²`}
+            />
             <KeyVal k="Perimeter Length" v={`${spill.metrics.perimeterM.toFixed(0)} m`} />
             <KeyVal
               k="Axes (Length × Width)"

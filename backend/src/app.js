@@ -18,6 +18,7 @@ const riskRoutes = require('./routes/risk.routes');
 const workerRoutes = require('./routes/worker.routes');
 const sceneWorker = require('./services/scene-worker.service');
 const aisService = require('./services/ais.service');
+const qaRoutes = require('./routes/qa.routes');
 
 const app = express();
 
@@ -39,6 +40,8 @@ app.use('/api/ingestion', ingestionRoutes);
 app.use('/api/risk', riskRoutes);
 // DAY 2 — scene acquisition worker
 app.use('/api/worker', workerRoutes);
+// QA - TinyFish Integration
+app.use('/api/qa', qaRoutes);
 
 const autoStartPoller = process.env.POLLER_AUTOSTART === 'true' || process.env.npm_lifecycle_event === 'start';
 if (autoStartPoller) {

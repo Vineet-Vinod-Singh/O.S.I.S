@@ -1,0 +1,24 @@
+{
+  "suites": [
+    {
+      "id": "smoke-test",
+      "name": "Frontend Smoke Test",
+      "task": "Navigate to the homepage. Ensure the application loads without a blank screen. Verify that the main map or dashboard components are rendered."
+    },
+    {
+      "id": "demo-pipeline-end-to-end",
+      "name": "Demo Pipeline End-to-End",
+      "task": "Navigate to the /analysis page. Select the 'DEMO pipeline' option. Click 'Analyze DEMO pipeline' and wait for the results. Verify that an incident report is generated and the UI shows 'SPILL_DETECTED' or 'NO_SPILL_DETECTED' or 'ANALYSIS_INCONCLUSIVE' and does not throw an unhandled exception."
+    },
+    {
+      "id": "form-validation",
+      "name": "Settings / Configuration Form Validation",
+      "task": "If there are forms or configuration panels in the UI, try to submit empty or invalid data. Verify that appropriate error messages are displayed and the application does not crash."
+    },
+    {
+      "id": "network-resilience",
+      "name": "API Resilience Test",
+      "task": "Perform a standard workflow (e.g. Analysis) and simulate network slowness or backend 500 error if possible via TinyFish network interception. Ensure the UI displays a clear, understandable error message."
+    }
+  ]
+}
