@@ -308,7 +308,12 @@ function RootLayout() {
                     <path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z" />
                   </svg>
                 </div>
-                <div className="text-[20px] font-bold text-white tracking-tight" style={{ textShadow: "0 2px 4px rgba(0,0,0,0.8)" }}>O.S.I.S.</div>
+                <div
+                  className="text-[20px] font-bold text-white tracking-tight"
+                  style={{ textShadow: "0 2px 4px rgba(0,0,0,0.8)" }}
+                >
+                  O.S.I.S.
+                </div>
               </Link>
 
               {/* Middle: Links */}

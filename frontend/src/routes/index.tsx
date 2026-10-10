@@ -61,11 +61,27 @@ function LandingPage() {
       }}
     >
       {/* Fixed Background Image for Parallax */}
-      <div style={{ position: "fixed", top: 0, left: 0, width: "100%", height: "100vh", zIndex: -1, backgroundColor: "#000" }}>
+      <div
+        style={{
+          position: "fixed",
+          top: 0,
+          left: 0,
+          width: "100%",
+          height: "100vh",
+          zIndex: -1,
+          backgroundColor: "#000",
+        }}
+      >
         <img
           src="/images/landing/hero-sunset-ship.jpg?v=2"
           alt="Ocean background"
-          style={{ width: "100%", height: "100%", objectFit: "cover", objectPosition: "center", filter: "brightness(0.55)" }}
+          style={{
+            width: "100%",
+            height: "100%",
+            objectFit: "cover",
+            objectPosition: "center",
+            filter: "brightness(0.55)",
+          }}
           fetchPriority="high"
         />
       </div>
@@ -83,7 +99,6 @@ function LandingPage() {
           fontFamily: "Inter, system-ui, sans-serif",
         }}
       >
-
         {/* Overlays */}
         {/* 0) Top gradient for header readability */}
         <div
@@ -105,8 +120,7 @@ function LandingPage() {
             inset: 0,
             zIndex: -1,
             pointerEvents: "none",
-            background:
-              "linear-gradient(90deg, rgba(3,8,15,0.8) 0%, transparent 65%)",
+            background: "linear-gradient(90deg, rgba(3,8,15,0.8) 0%, transparent 65%)",
           }}
         />
         {/* 2) Bottom gradient into --background behind the cards (REMOVED per user request) */}
@@ -401,7 +415,8 @@ function LandingPage() {
         id="how-it-works"
         style={{
           padding: "100px 32px",
-          background: "linear-gradient(165deg, rgba(7,11,16,0.7) 0%, rgba(13,20,28,0.4) 50%, rgba(7,11,16,0.7) 100%)",
+          background:
+            "linear-gradient(165deg, rgba(7,11,16,0.7) 0%, rgba(13,20,28,0.4) 50%, rgba(7,11,16,0.7) 100%)",
           position: "relative",
           overflow: "hidden",
           zIndex: 2,
@@ -524,7 +539,16 @@ function LandingPage() {
                 {PIPELINE.map((step, idx) => {
                   const Icon = step.icon;
                   return (
-                    <div key={idx} className="group" style={{ display: "flex", gap: 24, alignItems: "flex-start", cursor: "default" }}>
+                    <div
+                      key={idx}
+                      className="group"
+                      style={{
+                        display: "flex",
+                        gap: 24,
+                        alignItems: "flex-start",
+                        cursor: "default",
+                      }}
+                    >
                       <div
                         className="transition-all duration-300 group-hover:scale-110 group-hover:shadow-[0_0_15px_rgba(25,181,230,0.2)]"
                         style={{
@@ -541,7 +565,10 @@ function LandingPage() {
                       >
                         <Icon style={{ width: 16, height: 16, color: step.accent }} />
                       </div>
-                      <div style={{ paddingTop: 4 }} className="transition-all duration-300 group-hover:translate-x-1">
+                      <div
+                        style={{ paddingTop: 4 }}
+                        className="transition-all duration-300 group-hover:translate-x-1"
+                      >
                         <h3
                           className="font-mono transition-colors duration-300"
                           style={{
@@ -580,7 +607,7 @@ function LandingPage() {
           {/* Right column: SVG Illustration */}
           <div className="relative group perspective-1000">
             {/* Ambient glow behind card */}
-            <div 
+            <div
               style={{
                 position: "absolute",
                 inset: -20,
@@ -599,8 +626,10 @@ function LandingPage() {
                 aspectRatio: "1 / 0.9",
                 borderRadius: 16,
                 border: "1px solid rgba(255, 255, 255, 0.08)",
-                background: "linear-gradient(135deg, rgba(10, 16, 25, 0.9) 0%, rgba(5, 8, 12, 0.95) 100%)",
-                boxShadow: "0 20px 40px -10px rgba(0, 0, 0, 0.8), inset 0 1px 0 rgba(255,255,255,0.08)",
+                background:
+                  "linear-gradient(135deg, rgba(10, 16, 25, 0.9) 0%, rgba(5, 8, 12, 0.95) 100%)",
+                boxShadow:
+                  "0 20px 40px -10px rgba(0, 0, 0, 0.8), inset 0 1px 0 rgba(255,255,255,0.08)",
                 overflow: "hidden",
                 backdropFilter: "blur(20px)",
                 transform: "translateZ(0)",
@@ -608,400 +637,408 @@ function LandingPage() {
               className="transition-transform duration-700 group-hover:scale-[1.01]"
             >
               {/* Ocean grid background */}
-            <div
-              aria-hidden="true"
-              style={{
-                position: "absolute",
-                inset: 0,
-                backgroundImage:
-                  "linear-gradient(to right, rgba(29,42,54,0.12) 1px, transparent 1px), linear-gradient(to bottom, rgba(29,42,54,0.12) 1px, transparent 1px)",
-                backgroundSize: "32px 32px",
-              }}
-            />
-
-            {/* SVG intelligence scene */}
-            <svg
-              viewBox="0 0 500 450"
-              fill="none"
-              xmlns="http://www.w3.org/2000/svg"
-              style={{
-                position: "absolute",
-                inset: 0,
-                width: "100%",
-                height: "100%",
-              }}
-              aria-hidden="true"
-            >
-              <defs>
-                {/* Spill fill gradient */}
-                <radialGradient id="spillGrad" cx="0.5" cy="0.5" r="0.5">
-                  <stop offset="0%" stopColor="var(--destructive)" stopOpacity="0.3" />
-                  <stop offset="100%" stopColor="var(--destructive)" stopOpacity="0.06" />
-                </radialGradient>
-                {/* Origin uncertainty */}
-                <radialGradient id="originGrad" cx="0.5" cy="0.5" r="0.5">
-                  <stop offset="0%" stopColor="var(--accent-amber)" stopOpacity="0.15" />
-                  <stop offset="100%" stopColor="var(--accent-amber)" stopOpacity="0" />
-                </radialGradient>
-                {/* Pulse animation for spill */}
-                <filter id="spillGlow">
-                  <feGaussianBlur in="SourceGraphic" stdDeviation="3" />
-                </filter>
-              </defs>
-
-              {/* ── Coastline contour (top-right, subtle) ── */}
-              <path
-                d="M 500 0 L 500 85 Q 465 90, 440 105 Q 410 125, 395 115 Q 375 100, 360 110 Q 340 125, 330 118 Q 310 105, 295 115 Q 275 130, 260 125 L 260 0 Z"
-                fill="#111A24"
-                stroke="#1D2A36"
-                strokeWidth="1"
-                opacity="0.6"
-              />
-              {/* Coastline edge highlight */}
-              <path
-                d="M 500 85 Q 465 90, 440 105 Q 410 125, 395 115 Q 375 100, 360 110 Q 340 125, 330 118 Q 310 105, 295 115 Q 275 130, 260 125"
-                fill="none"
-                stroke="#1D2A36"
-                strokeWidth="1.5"
-                opacity="0.8"
-              />
-
-              {/* ── Lat/Lon reference lines ── */}
-              <line
-                x1="0"
-                y1="200"
-                x2="500"
-                y2="200"
-                stroke="#1D2A36"
-                strokeWidth="0.5"
-                strokeDasharray="4 8"
-                opacity="0.4"
-              />
-              <line
-                x1="250"
-                y1="0"
-                x2="250"
-                y2="450"
-                stroke="#1D2A36"
-                strokeWidth="0.5"
-                strokeDasharray="4 8"
-                opacity="0.4"
-              />
-
-              {/* LAYER 1: VESSEL TRAJECTORIES */}
-              <polyline
-                points="125,148 140,155 158,160 175,162 188,158"
-                fill="none"
-                stroke="var(--primary)"
-                strokeWidth="0.8"
-                strokeDasharray="3 4"
-                opacity="0.25"
-              />
-              <polyline
-                points="80,235 110,228 145,220 180,215 210,218 240,225"
-                fill="none"
-                stroke="var(--primary)"
-                strokeWidth="0.8"
-                strokeDasharray="3 4"
-                opacity="0.25"
-              />
-              <polyline
-                points="220,160 230,175 235,195 232,210"
-                fill="none"
-                stroke="var(--primary)"
-                strokeWidth="0.8"
-                strokeDasharray="3 4"
-                opacity="0.2"
-              />
-
-              {/* LAYER 2: DRIFT TRAJECTORY */}
-              <path
-                d="M 195,210 Q 220,240 240,265 Q 265,295 280,320 Q 290,340 305,355"
-                fill="none"
-                stroke="var(--accent-amber)"
-                strokeWidth="1.8"
-                strokeDasharray="6 5"
-                opacity="0.7"
-                className="landing-drift-path"
-              />
-              <polygon points="260,282 265,275 270,283" fill="var(--accent-amber)" opacity="0.45" />
-              <polygon points="290,335 294,327 299,336" fill="var(--accent-amber)" opacity="0.35" />
-
-              {/* LAYER 3: ESTIMATED ORIGIN */}
-              <circle cx="195" cy="210" r="28" fill="url(#originGrad)" />
-              <circle
-                cx="195"
-                cy="210"
-                r="28"
-                fill="none"
-                stroke="var(--accent-amber)"
-                strokeWidth="0.8"
-                strokeDasharray="3 3"
-                opacity="0.4"
-              />
-              <circle cx="195" cy="210" r="4" fill="var(--accent-amber)" />
-              <circle
-                cx="195"
-                cy="210"
-                r="7"
-                fill="none"
-                stroke="var(--accent-amber)"
-                strokeWidth="1"
-                opacity="0.5"
-              />
-
-              {/* LAYER 4: OIL SPILL DETECTION REGION */}
-              <path
-                d="M 290,340 Q 300,330 320,335 Q 340,340 350,355 Q 358,370 352,385 Q 342,400 325,405 Q 305,408 290,400 Q 275,390 272,375 Q 270,360 278,348 Z"
-                fill="url(#spillGrad)"
-                stroke="var(--destructive)"
-                strokeWidth="1.5"
-                opacity="0.85"
-              />
-              <path
-                d="M 305,355 Q 315,348 325,355 Q 335,365 330,378 Q 322,388 310,385 Q 298,380 300,368 Z"
-                fill="var(--destructive)"
-                fillOpacity="0.18"
-                stroke="none"
-              />
-              <circle
-                cx="315"
-                cy="370"
-                r="18"
-                fill="none"
-                stroke="var(--destructive)"
-                strokeWidth="0.8"
-                opacity="0.35"
-                className="landing-spill-pulse"
-              />
-
-              {/* LAYER 5: VESSEL MARKERS */}
-              <g>
-                <polygon points="188,158 184,165 192,165" fill="var(--primary)" opacity="0.85" />
-                <circle
-                  cx="188"
-                  cy="161"
-                  r="8"
-                  fill="none"
-                  stroke="var(--primary)"
-                  strokeWidth="0.7"
-                  opacity="0.3"
-                />
-              </g>
-              <g>
-                <polygon points="240,225 236,232 244,232" fill="var(--primary)" opacity="0.6" />
-                <circle
-                  cx="240"
-                  cy="228"
-                  r="7"
-                  fill="none"
-                  stroke="var(--primary)"
-                  strokeWidth="0.6"
-                  opacity="0.2"
-                />
-              </g>
-              <g>
-                <polygon points="232,210 228,217 236,217" fill="var(--primary)" opacity="0.4" />
-              </g>
-
-              {/* LABELS */}
-              <g>
-                <rect
-                  x="340"
-                  y="343"
-                  width="86"
-                  height="18"
-                  rx="3"
-                  fill="#0A1018"
-                  fillOpacity="0.85"
-                  stroke="var(--destructive)"
-                  strokeWidth="0.6"
-                  opacity="0.8"
-                />
-                <text
-                  x="383"
-                  y="355"
-                  textAnchor="middle"
-                  fill="var(--destructive)"
-                  fontSize="8"
-                  fontFamily="ui-monospace, SFMono-Regular, monospace"
-                  letterSpacing="0.1em"
-                  opacity="0.9"
-                >
-                  SAR DETECTION
-                </text>
-              </g>
-              <g>
-                <rect
-                  x="130"
-                  y="188"
-                  width="54"
-                  height="16"
-                  rx="3"
-                  fill="#0A1018"
-                  fillOpacity="0.85"
-                  stroke="var(--accent-amber)"
-                  strokeWidth="0.5"
-                  opacity="0.7"
-                />
-                <text
-                  x="157"
-                  y="199"
-                  textAnchor="middle"
-                  fill="var(--accent-amber)"
-                  fontSize="7"
-                  fontFamily="ui-monospace, SFMono-Regular, monospace"
-                  letterSpacing="0.1em"
-                  opacity="0.85"
-                >
-                  EST. ORIGIN
-                </text>
-              </g>
-              <g>
-                <text
-                  x="228"
-                  y="290"
-                  fill="var(--accent-amber)"
-                  fontSize="7"
-                  fontFamily="ui-monospace, SFMono-Regular, monospace"
-                  letterSpacing="0.08em"
-                  opacity="0.5"
-                  transform="rotate(-52, 228, 290)"
-                >
-                  DRIFT BACKTRACK
-                </text>
-              </g>
-              <g>
-                <rect
-                  x="100"
-                  y="135"
-                  width="80"
-                  height="16"
-                  rx="3"
-                  fill="#0A1018"
-                  fillOpacity="0.8"
-                  stroke="var(--primary)"
-                  strokeWidth="0.5"
-                  opacity="0.6"
-                />
-                <text
-                  x="140"
-                  y="146"
-                  textAnchor="middle"
-                  fill="var(--primary)"
-                  fontSize="7"
-                  fontFamily="ui-monospace, SFMono-Regular, monospace"
-                  letterSpacing="0.1em"
-                  opacity="0.7"
-                >
-                  AIS CORRELATION
-                </text>
-              </g>
-
-              <text
-                x="197"
-                y="155"
-                fill="var(--primary)"
-                fontSize="6.5"
-                fontFamily="ui-monospace, SFMono-Regular, monospace"
-                opacity="0.5"
-              >
-                V-01
-              </text>
-              <text
-                x="248"
-                y="224"
-                fill="var(--primary)"
-                fontSize="6.5"
-                fontFamily="ui-monospace, SFMono-Regular, monospace"
-                opacity="0.4"
-              >
-                V-02
-              </text>
-              <text
-                x="240"
-                y="209"
-                fill="var(--primary)"
-                fontSize="6.5"
-                fontFamily="ui-monospace, SFMono-Regular, monospace"
-                opacity="0.3"
-              >
-                V-03
-              </text>
-            </svg>
-
-            {/* Corner overlays */}
-            <span
-              className="font-mono"
-              style={{
-                position: "absolute",
-                top: 14,
-                left: 14,
-                fontSize: 9,
-                color: "var(--muted-foreground)",
-                letterSpacing: "0.12em",
-                opacity: 0.55,
-                textTransform: "uppercase",
-              }}
-            >
-              Sentinel-1 SAR
-            </span>
-            <span
-              className="font-mono"
-              style={{
-                position: "absolute",
-                top: 14,
-                right: 14,
-                fontSize: 9,
-                letterSpacing: "0.1em",
-                display: "flex",
-                alignItems: "center",
-                gap: 6,
-                textTransform: "uppercase",
-              }}
-            >
-              <span
+              <div
+                aria-hidden="true"
                 style={{
-                  width: 5,
-                  height: 5,
-                  borderRadius: "50%",
-                  background: "var(--muted-foreground)",
-                  display: "inline-block",
+                  position: "absolute",
+                  inset: 0,
+                  backgroundImage:
+                    "linear-gradient(to right, rgba(29,42,54,0.12) 1px, transparent 1px), linear-gradient(to bottom, rgba(29,42,54,0.12) 1px, transparent 1px)",
+                  backgroundSize: "32px 32px",
                 }}
               />
-              <span style={{ color: "var(--muted-foreground)", opacity: 0.8 }}>
-                Illustrative Data
+
+              {/* SVG intelligence scene */}
+              <svg
+                viewBox="0 0 500 450"
+                fill="none"
+                xmlns="http://www.w3.org/2000/svg"
+                style={{
+                  position: "absolute",
+                  inset: 0,
+                  width: "100%",
+                  height: "100%",
+                }}
+                aria-hidden="true"
+              >
+                <defs>
+                  {/* Spill fill gradient */}
+                  <radialGradient id="spillGrad" cx="0.5" cy="0.5" r="0.5">
+                    <stop offset="0%" stopColor="var(--destructive)" stopOpacity="0.3" />
+                    <stop offset="100%" stopColor="var(--destructive)" stopOpacity="0.06" />
+                  </radialGradient>
+                  {/* Origin uncertainty */}
+                  <radialGradient id="originGrad" cx="0.5" cy="0.5" r="0.5">
+                    <stop offset="0%" stopColor="var(--accent-amber)" stopOpacity="0.15" />
+                    <stop offset="100%" stopColor="var(--accent-amber)" stopOpacity="0" />
+                  </radialGradient>
+                  {/* Pulse animation for spill */}
+                  <filter id="spillGlow">
+                    <feGaussianBlur in="SourceGraphic" stdDeviation="3" />
+                  </filter>
+                </defs>
+
+                {/* ── Coastline contour (top-right, subtle) ── */}
+                <path
+                  d="M 500 0 L 500 85 Q 465 90, 440 105 Q 410 125, 395 115 Q 375 100, 360 110 Q 340 125, 330 118 Q 310 105, 295 115 Q 275 130, 260 125 L 260 0 Z"
+                  fill="#111A24"
+                  stroke="#1D2A36"
+                  strokeWidth="1"
+                  opacity="0.6"
+                />
+                {/* Coastline edge highlight */}
+                <path
+                  d="M 500 85 Q 465 90, 440 105 Q 410 125, 395 115 Q 375 100, 360 110 Q 340 125, 330 118 Q 310 105, 295 115 Q 275 130, 260 125"
+                  fill="none"
+                  stroke="#1D2A36"
+                  strokeWidth="1.5"
+                  opacity="0.8"
+                />
+
+                {/* ── Lat/Lon reference lines ── */}
+                <line
+                  x1="0"
+                  y1="200"
+                  x2="500"
+                  y2="200"
+                  stroke="#1D2A36"
+                  strokeWidth="0.5"
+                  strokeDasharray="4 8"
+                  opacity="0.4"
+                />
+                <line
+                  x1="250"
+                  y1="0"
+                  x2="250"
+                  y2="450"
+                  stroke="#1D2A36"
+                  strokeWidth="0.5"
+                  strokeDasharray="4 8"
+                  opacity="0.4"
+                />
+
+                {/* LAYER 1: VESSEL TRAJECTORIES */}
+                <polyline
+                  points="125,148 140,155 158,160 175,162 188,158"
+                  fill="none"
+                  stroke="var(--primary)"
+                  strokeWidth="0.8"
+                  strokeDasharray="3 4"
+                  opacity="0.25"
+                />
+                <polyline
+                  points="80,235 110,228 145,220 180,215 210,218 240,225"
+                  fill="none"
+                  stroke="var(--primary)"
+                  strokeWidth="0.8"
+                  strokeDasharray="3 4"
+                  opacity="0.25"
+                />
+                <polyline
+                  points="220,160 230,175 235,195 232,210"
+                  fill="none"
+                  stroke="var(--primary)"
+                  strokeWidth="0.8"
+                  strokeDasharray="3 4"
+                  opacity="0.2"
+                />
+
+                {/* LAYER 2: DRIFT TRAJECTORY */}
+                <path
+                  d="M 195,210 Q 220,240 240,265 Q 265,295 280,320 Q 290,340 305,355"
+                  fill="none"
+                  stroke="var(--accent-amber)"
+                  strokeWidth="1.8"
+                  strokeDasharray="6 5"
+                  opacity="0.7"
+                  className="landing-drift-path"
+                />
+                <polygon
+                  points="260,282 265,275 270,283"
+                  fill="var(--accent-amber)"
+                  opacity="0.45"
+                />
+                <polygon
+                  points="290,335 294,327 299,336"
+                  fill="var(--accent-amber)"
+                  opacity="0.35"
+                />
+
+                {/* LAYER 3: ESTIMATED ORIGIN */}
+                <circle cx="195" cy="210" r="28" fill="url(#originGrad)" />
+                <circle
+                  cx="195"
+                  cy="210"
+                  r="28"
+                  fill="none"
+                  stroke="var(--accent-amber)"
+                  strokeWidth="0.8"
+                  strokeDasharray="3 3"
+                  opacity="0.4"
+                />
+                <circle cx="195" cy="210" r="4" fill="var(--accent-amber)" />
+                <circle
+                  cx="195"
+                  cy="210"
+                  r="7"
+                  fill="none"
+                  stroke="var(--accent-amber)"
+                  strokeWidth="1"
+                  opacity="0.5"
+                />
+
+                {/* LAYER 4: OIL SPILL DETECTION REGION */}
+                <path
+                  d="M 290,340 Q 300,330 320,335 Q 340,340 350,355 Q 358,370 352,385 Q 342,400 325,405 Q 305,408 290,400 Q 275,390 272,375 Q 270,360 278,348 Z"
+                  fill="url(#spillGrad)"
+                  stroke="var(--destructive)"
+                  strokeWidth="1.5"
+                  opacity="0.85"
+                />
+                <path
+                  d="M 305,355 Q 315,348 325,355 Q 335,365 330,378 Q 322,388 310,385 Q 298,380 300,368 Z"
+                  fill="var(--destructive)"
+                  fillOpacity="0.18"
+                  stroke="none"
+                />
+                <circle
+                  cx="315"
+                  cy="370"
+                  r="18"
+                  fill="none"
+                  stroke="var(--destructive)"
+                  strokeWidth="0.8"
+                  opacity="0.35"
+                  className="landing-spill-pulse"
+                />
+
+                {/* LAYER 5: VESSEL MARKERS */}
+                <g>
+                  <polygon points="188,158 184,165 192,165" fill="var(--primary)" opacity="0.85" />
+                  <circle
+                    cx="188"
+                    cy="161"
+                    r="8"
+                    fill="none"
+                    stroke="var(--primary)"
+                    strokeWidth="0.7"
+                    opacity="0.3"
+                  />
+                </g>
+                <g>
+                  <polygon points="240,225 236,232 244,232" fill="var(--primary)" opacity="0.6" />
+                  <circle
+                    cx="240"
+                    cy="228"
+                    r="7"
+                    fill="none"
+                    stroke="var(--primary)"
+                    strokeWidth="0.6"
+                    opacity="0.2"
+                  />
+                </g>
+                <g>
+                  <polygon points="232,210 228,217 236,217" fill="var(--primary)" opacity="0.4" />
+                </g>
+
+                {/* LABELS */}
+                <g>
+                  <rect
+                    x="340"
+                    y="343"
+                    width="86"
+                    height="18"
+                    rx="3"
+                    fill="#0A1018"
+                    fillOpacity="0.85"
+                    stroke="var(--destructive)"
+                    strokeWidth="0.6"
+                    opacity="0.8"
+                  />
+                  <text
+                    x="383"
+                    y="355"
+                    textAnchor="middle"
+                    fill="var(--destructive)"
+                    fontSize="8"
+                    fontFamily="ui-monospace, SFMono-Regular, monospace"
+                    letterSpacing="0.1em"
+                    opacity="0.9"
+                  >
+                    SAR DETECTION
+                  </text>
+                </g>
+                <g>
+                  <rect
+                    x="130"
+                    y="188"
+                    width="54"
+                    height="16"
+                    rx="3"
+                    fill="#0A1018"
+                    fillOpacity="0.85"
+                    stroke="var(--accent-amber)"
+                    strokeWidth="0.5"
+                    opacity="0.7"
+                  />
+                  <text
+                    x="157"
+                    y="199"
+                    textAnchor="middle"
+                    fill="var(--accent-amber)"
+                    fontSize="7"
+                    fontFamily="ui-monospace, SFMono-Regular, monospace"
+                    letterSpacing="0.1em"
+                    opacity="0.85"
+                  >
+                    EST. ORIGIN
+                  </text>
+                </g>
+                <g>
+                  <text
+                    x="228"
+                    y="290"
+                    fill="var(--accent-amber)"
+                    fontSize="7"
+                    fontFamily="ui-monospace, SFMono-Regular, monospace"
+                    letterSpacing="0.08em"
+                    opacity="0.5"
+                    transform="rotate(-52, 228, 290)"
+                  >
+                    DRIFT BACKTRACK
+                  </text>
+                </g>
+                <g>
+                  <rect
+                    x="100"
+                    y="135"
+                    width="80"
+                    height="16"
+                    rx="3"
+                    fill="#0A1018"
+                    fillOpacity="0.8"
+                    stroke="var(--primary)"
+                    strokeWidth="0.5"
+                    opacity="0.6"
+                  />
+                  <text
+                    x="140"
+                    y="146"
+                    textAnchor="middle"
+                    fill="var(--primary)"
+                    fontSize="7"
+                    fontFamily="ui-monospace, SFMono-Regular, monospace"
+                    letterSpacing="0.1em"
+                    opacity="0.7"
+                  >
+                    AIS CORRELATION
+                  </text>
+                </g>
+
+                <text
+                  x="197"
+                  y="155"
+                  fill="var(--primary)"
+                  fontSize="6.5"
+                  fontFamily="ui-monospace, SFMono-Regular, monospace"
+                  opacity="0.5"
+                >
+                  V-01
+                </text>
+                <text
+                  x="248"
+                  y="224"
+                  fill="var(--primary)"
+                  fontSize="6.5"
+                  fontFamily="ui-monospace, SFMono-Regular, monospace"
+                  opacity="0.4"
+                >
+                  V-02
+                </text>
+                <text
+                  x="240"
+                  y="209"
+                  fill="var(--primary)"
+                  fontSize="6.5"
+                  fontFamily="ui-monospace, SFMono-Regular, monospace"
+                  opacity="0.3"
+                >
+                  V-03
+                </text>
+              </svg>
+
+              {/* Corner overlays */}
+              <span
+                className="font-mono"
+                style={{
+                  position: "absolute",
+                  top: 14,
+                  left: 14,
+                  fontSize: 9,
+                  color: "var(--muted-foreground)",
+                  letterSpacing: "0.12em",
+                  opacity: 0.55,
+                  textTransform: "uppercase",
+                }}
+              >
+                Sentinel-1 SAR
               </span>
-            </span>
-            <span
-              className="font-mono"
-              style={{
-                position: "absolute",
-                bottom: 12,
-                left: 14,
-                fontSize: 9,
-                color: "var(--muted-foreground)",
-                letterSpacing: "0.06em",
-                opacity: 0.5,
-              }}
-            >
-              15.25°N &nbsp;72.45°E
-            </span>
-            <span
-              className="font-mono"
-              style={{
-                position: "absolute",
-                bottom: 12,
-                right: 14,
-                fontSize: 9,
-                color: "var(--muted-foreground)",
-                letterSpacing: "0.08em",
-                opacity: 0.45,
-                textTransform: "uppercase",
-              }}
-            >
-              Arabian Sea Sector
-            </span>
+              <span
+                className="font-mono"
+                style={{
+                  position: "absolute",
+                  top: 14,
+                  right: 14,
+                  fontSize: 9,
+                  letterSpacing: "0.1em",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 6,
+                  textTransform: "uppercase",
+                }}
+              >
+                <span
+                  style={{
+                    width: 5,
+                    height: 5,
+                    borderRadius: "50%",
+                    background: "var(--muted-foreground)",
+                    display: "inline-block",
+                  }}
+                />
+                <span style={{ color: "var(--muted-foreground)", opacity: 0.8 }}>
+                  Illustrative Data
+                </span>
+              </span>
+              <span
+                className="font-mono"
+                style={{
+                  position: "absolute",
+                  bottom: 12,
+                  left: 14,
+                  fontSize: 9,
+                  color: "var(--muted-foreground)",
+                  letterSpacing: "0.06em",
+                  opacity: 0.5,
+                }}
+              >
+                15.25°N &nbsp;72.45°E
+              </span>
+              <span
+                className="font-mono"
+                style={{
+                  position: "absolute",
+                  bottom: 12,
+                  right: 14,
+                  fontSize: 9,
+                  color: "var(--muted-foreground)",
+                  letterSpacing: "0.08em",
+                  opacity: 0.45,
+                  textTransform: "uppercase",
+                }}
+              >
+                Arabian Sea Sector
+              </span>
             </div>
           </div>
         </div>
