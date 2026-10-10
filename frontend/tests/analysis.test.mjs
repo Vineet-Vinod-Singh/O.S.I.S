@@ -11,7 +11,7 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 
 const root = fileURLToPath(new URL("..", import.meta.url));
-let directory, ReportView, demo, partial, noSpill, inconclusive;
+let directory, ReportView, getDetectionPresentation, getReportExportPayload, demo, partial, noSpill, inconclusive;
 const render = (report) => renderToStaticMarkup(createElement(ReportView, { report }));
 
 before(async () => {
@@ -31,7 +31,7 @@ before(async () => {
     await writeFile(filePath, item.code);
   }
   const entry = output.find((item) => item.isEntry);
-  ({ ReportView } = await import(pathToFileURL(path.join(directory, entry.fileName)).href));
+  ({ ReportView, getDetectionPresentation, getReportExportPayload } = await import(pathToFileURL(path.join(directory, entry.fileName)).href));
   const pipeline = (name, input, env = {}) => {
     const child = spawnSync(
       process.env.PYTHON_PATH || "python",
@@ -98,9 +98,123 @@ test("no candidates is distinct from detector failure", () => {
 test("SAR-only partial report renders geometry with null origin, age and AIS", () => {
   const report = { ...partial, detections: demo.detections, spill: demo.spill };
   const html = render(report);
-  assert.match(html, /Perimeter/);
+  assert.match(html, /Candidate perimeter/);
+  assert.match(html, /CANDIDATE ANOMALIES ONLY/);
   assert.match(html, /Spill age unavailable/);
   assert.match(html, /No attribution generated/);
+});
+
+test("inconclusive report with candidate geometry never presents a positive spill", () => {
+  const candidate = { ...demo.spill, passesOilEvidenceGate: false };
+  const report = {
+    ...partial,
+    outcome: "ANALYSIS_INCONCLUSIVE",
+    detections: [candidate],
+    spill: candidate,
+    candidateAnomalies: [candidate],
+  };
+  const presentation = getDetectionPresentation(report);
+  const html = render(report);
+  const exported = getReportExportPayload(report);
+
+  assert.equal(presentation.outcome, "ANALYSIS_INCONCLUSIVE");
+  assert.equal(presentation.spill, null);
+  assert.equal(presentation.markerLabel, "Candidate Anomaly");
+  assert.equal(presentation.signatureLabel, "Candidate Anomalies Only");
+  assert.equal(presentation.areaLabel, "Candidate area (unconfirmed)");
+  assert.match(html, /INCONCLUSIVE — CANDIDATE ANOMALIES ONLY/);
+  assert.match(html, /Candidate area \(unconfirmed\)/);
+  assert.match(html, /Candidate Anomaly/);
+  assert.doesNotMatch(html, /OIL-LIKE SIGNATURE DETECTED/);
+  assert.doesNotMatch(html, /Detected Spill/);
+  assert.doesNotMatch(html, /Confidence: ~/);
+  assert.equal(exported.spill, null);
+  assert.deepEqual(exported.candidateAnomalies, [candidate]);
+});
+
+test("failed gate detection remains a candidate rather than a detected spill", () => {
+  const failed = { ...demo.spill, passesOilEvidenceGate: false };
+  const report = {
+    ...partial,
+    outcome: "ANALYSIS_INCONCLUSIVE",
+    spill: failed,
+    detections: [failed],
+  };
+  const presentation = getDetectionPresentation(report);
+
+  assert.equal(presentation.spill, null);
+  assert.equal(presentation.markerLabel, "Candidate Anomaly");
+  assert.deepEqual(presentation.candidateAnomalies, [failed]);
+});
+
+test("gate-passing candidate retains positive presentation only under positive outcome", () => {
+  const passing = { ...demo.spill, passesOilEvidenceGate: true };
+  const positive = {
+    ...partial,
+    outcome: "SPILL_DETECTED",
+    detections: [passing],
+    spill: passing,
+  };
+  const positivePresentation = getDetectionPresentation(positive);
+  assert.equal(positivePresentation.spill, passing);
+  assert.equal(positivePresentation.markerLabel, "Detected Spill");
+  assert.equal(positivePresentation.signatureLabel, "Oil-Like Inferred");
+  assert.equal(positivePresentation.areaLabel, "Spill Area");
+  assert.match(render(positive), /OIL-LIKE SIGNATURE DETECTED/);
+
+  const inconclusive = { ...positive, outcome: "ANALYSIS_INCONCLUSIVE" };
+  const inconclusivePresentation = getDetectionPresentation(inconclusive);
+  assert.equal(inconclusivePresentation.spill, null);
+  assert.equal(inconclusivePresentation.markerLabel, "Candidate Anomaly");
+  assert.doesNotMatch(render(inconclusive), /OIL-LIKE SIGNATURE DETECTED/);
+});
+
+test("legacy inconclusive reports without candidateAnomalies remain readable", () => {
+  const legacyCandidate = { ...demo.spill };
+  const legacy = {
+    ...partial,
+    outcome: "ANALYSIS_INCONCLUSIVE",
+    detections: [],
+    spill: legacyCandidate,
+  };
+  delete legacy.candidateAnomalies;
+  const presentation = getDetectionPresentation(legacy);
+
+  assert.equal(presentation.spill, null);
+  assert.deepEqual(presentation.candidateAnomalies, [legacyCandidate]);
+  assert.equal(presentation.markerLabel, "Candidate Anomaly");
+  assert.match(render(legacy), /ANALYSIS INCONCLUSIVE/);
+});
+
+test("map marker and summary metrics use the same outcome-aware feature", () => {
+  const candidate = { ...demo.spill, passesOilEvidenceGate: false };
+  const report = {
+    ...partial,
+    outcome: "ANALYSIS_INCONCLUSIVE",
+    detections: [candidate],
+    candidateAnomalies: [candidate],
+  };
+  const presentation = getDetectionPresentation(report);
+  const html = render(report);
+
+  assert.equal(presentation.markerLabel, "Candidate Anomaly");
+  assert.equal(presentation.feature, candidate);
+  assert.equal(presentation.areaLabel, "Candidate area (unconfirmed)");
+  assert.match(html, /Candidate area \(unconfirmed\)/);
+  assert.match(html, /Candidate Anomaly/);
+  assert.doesNotMatch(html, /Detected Spill/);
+});
+
+test("Costa Rica sector-label inconsistency remains a separate known issue", () => {
+  // OceanMap's fixed Arabian Sea label is an independent presentation issue.
+  const report = {
+    ...partial,
+    scene: { ...partial.scene, bbox: [-85.7753, 9.492, -85.6753, 9.592] },
+  };
+  const html = render(report);
+
+  assert.match(html, /Analyzed bounds: \[-85\.7753, 9\.492, -85\.6753, 9\.592\]/);
+  assert.match(html, /Arabian Sea Sector/);
 });
 
 test("modeled origin without age or AIS remains explicitly conditional", () => {

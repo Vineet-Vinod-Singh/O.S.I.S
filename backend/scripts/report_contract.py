@@ -7,6 +7,7 @@ def finalize(report, mode):
     report["schemaVersion"] = "2.0"
     for name in ("mask", "detections", "backward", "forward", "candidates", "anomalies", "stages", "uncertainty"):
         report.setdefault(name, [])
+    report.setdefault("candidateAnomalies", [])
     for name in ("spill", "age", "origin", "leadingCandidate"):
         report.setdefault(name, None)
     report.setdefault("environment", {})
@@ -30,6 +31,23 @@ def finalize(report, mode):
     if outcome not in OUTCOMES:
         raise ValueError("Invalid analysis outcome")
     report["outcome"] = outcome
+    if outcome == "ANALYSIS_INCONCLUSIVE":
+        candidate_anomalies = report.get("candidateAnomalies") or []
+        legacy_spill = report.get("spill")
+        if legacy_spill is not None and legacy_spill not in candidate_anomalies:
+            candidate_anomalies.insert(0, legacy_spill)
+        report["candidateAnomalies"] = candidate_anomalies
+        report["spill"] = None
+    elif outcome == "NO_SPILL_DETECTED":
+        report["spill"] = None
+    elif outcome == "SPILL_DETECTED":
+        spill = report.get("spill")
+        if not demo and spill is not None and not spill.get("passesOilEvidenceGate"):
+            candidate_anomalies = report.get("candidateAnomalies") or []
+            if spill not in candidate_anomalies:
+                candidate_anomalies.insert(0, spill)
+            report["candidateAnomalies"] = candidate_anomalies
+            report["spill"] = None
     messages = {
         "SPILL_DETECTED": "Oil-like slick detected; analytical candidate, not laboratory confirmation of oil.",
         "NO_SPILL_DETECTED": "Analysis completed: no significant oil-like anomaly detected. This is not proof of clean water.",
@@ -43,7 +61,7 @@ def finalize(report, mode):
     scene["footprint"] = ({"type": "Polygon", "coordinates": [[[bbox[0], bbox[1]], [bbox[2], bbox[1]],
                           [bbox[2], bbox[3]], [bbox[0], bbox[3]], [bbox[0], bbox[1]]]]} if bbox else None)
     fields = {"imagery": any(v is not None for row in scene.get("pixels", []) for v in row), "detection": stage.get("status") != "unavailable",
-              "geometry": bool(report["spill"]), "age": bool(report["age"]), "environment": bool(report["environment"]) and report["environment"].get("status") != "UNAVAILABLE",
+              "geometry": bool(report["spill"] or report["candidateAnomalies"]), "age": bool(report["age"]), "environment": bool(report["environment"]) and report["environment"].get("status") != "UNAVAILABLE",
               "origin": bool(report["origin"]), "drift": bool(report["forward"]), "ais": bool(report["ais"].get("records")),
               "vesselIdentity": bool(report["candidates"]), "vesselScore": bool(report["candidates"])}
     report["evidenceProvenance"] = {}

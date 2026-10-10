@@ -138,7 +138,8 @@ class EnvironmentTests(unittest.TestCase):
             report = pipeline.analyze({"sceneId": scene["id"]})
         ais.assert_not_called()
         self.assertEqual(report["status"], "partial")
-        self.assertEqual(report["spill"], sar["detections"][0])
+        self.assertIsNone(report["spill"])
+        self.assertEqual(report["candidateAnomalies"], sar["detections"])
         self.assertEqual(report["stageStatus"]["environment"]["status"], "completed")
         for name in ("hindcast", "forecast"):
             self.assertEqual(report["stageStatus"][name]["status"], "unavailable")

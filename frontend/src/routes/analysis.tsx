@@ -18,6 +18,7 @@ import {
   analyzeIncident,
   getIncident,
   listIncidentScenes,
+  type Detection,
   type IncidentReport,
   type Position,
 } from "../api/incidents";
@@ -84,18 +85,67 @@ export function ReportView({ report }: { report: IncidentReport }) {
   return <InvestigationReport report={report} />;
 }
 
+export function getDetectionPresentation(report: IncidentReport) {
+  const outcome = report.outcome ?? "ANALYSIS_INCONCLUSIVE";
+  const storedSpill = report.spill ?? null;
+  const spill = outcome === "SPILL_DETECTED" && storedSpill?.passesOilEvidenceGate !== false
+    ? storedSpill
+    : null;
+  const sameGeometry = (left: Detection, right: Detection) =>
+    left === right || JSON.stringify(left.geometry) === JSON.stringify(right.geometry);
+  const legacyCandidates = outcome === "ANALYSIS_INCONCLUSIVE"
+    ? report.detections.length > 0
+      ? report.detections
+      : storedSpill
+        ? [storedSpill]
+        : []
+    : outcome === "SPILL_DETECTED"
+      ? report.detections.filter((d) => d.passesOilEvidenceGate === false || !spill || !sameGeometry(d, spill))
+      : report.detections;
+  const candidateAnomalies = report.candidateAnomalies?.length
+    ? report.candidateAnomalies
+    : legacyCandidates;
+  const candidate = candidateAnomalies[0] ?? null;
+  const feature = spill ?? candidate;
+
+  return {
+    outcome,
+    spill,
+    candidateAnomalies,
+    feature,
+    markerLabel: spill ? "Detected Spill" : candidate ? "Candidate Anomaly" : null,
+    signatureLabel: spill
+      ? "Oil-Like Inferred"
+      : candidate
+        ? "Candidate Anomalies Only"
+        : outcome === "ANALYSIS_INCONCLUSIVE"
+          ? "Inconclusive — no retained candidates"
+          : outcome === "NO_SPILL_DETECTED"
+            ? "No significant anomaly"
+            : "No spill geometry available",
+    areaLabel: spill ? "Spill Area" : candidate ? "Candidate area (unconfirmed)" : "Spill Area",
+  };
+}
+
+export function getReportExportPayload(report: IncidentReport) {
+  const { spill, candidateAnomalies } = getDetectionPresentation(report);
+  return { ...report, spill, candidateAnomalies };
+}
+
 /** The main investigation report view — evaluator-first layout */
 function InvestigationReport({ report }: { report: IncidentReport }) {
   const [image, setImage] = useState("");
   const [selected, setSelected] = useState(report.leadingCandidate);
-  const { spill, origin, age, candidates, anomalies, outcome } = report;
+  const presentation = getDetectionPresentation(report);
+  const { spill, candidateAnomalies, feature, outcome } = presentation;
+  const { origin, age, candidates, anomalies } = report;
   const topCandidate = candidates[0] ?? null;
   const isDemo = report.mode === "DEMO" || !report.mode;
 
   // Map setup
   const [west, south, east, north] = report.scene.bbox ?? [72.3, 15.1, 72.6, 15.4];
-  const mapCenter: [number, number] = spill
-    ? [spill.metrics.centroid.lat, spill.metrics.centroid.lon]
+  const mapCenter: [number, number] = feature
+    ? [feature.metrics.centroid.lat, feature.metrics.centroid.lon]
     : origin
       ? [origin.lat, origin.lon]
       : [(south + north) / 2, (west + east) / 2];
@@ -103,7 +153,7 @@ function InvestigationReport({ report }: { report: IncidentReport }) {
 
   const exportReport = () => {
     const url = URL.createObjectURL(
-      new Blob([JSON.stringify(report, null, 2)], { type: "application/json" }),
+      new Blob([JSON.stringify(getReportExportPayload(report), null, 2)], { type: "application/json" }),
     );
     const link = document.createElement("a");
     link.href = url;
@@ -118,7 +168,9 @@ function InvestigationReport({ report }: { report: IncidentReport }) {
     : outcome === "NO_SPILL_DETECTED"
       ? "NO SPILL DETECTED"
       : outcome === "ANALYSIS_INCONCLUSIVE"
-        ? "ANALYSIS INCONCLUSIVE"
+        ? candidateAnomalies.length > 0
+          ? "INCONCLUSIVE — CANDIDATE ANOMALIES ONLY"
+          : "ANALYSIS INCONCLUSIVE"
         : outcome === "SPILL_DETECTED"
           ? "OIL-LIKE SIGNATURE DETECTED (INVESTIGATION PARTIAL)"
           : "INVESTIGATION COMPLETE";
@@ -167,7 +219,7 @@ function InvestigationReport({ report }: { report: IncidentReport }) {
       <section className="rounded border border-border/70 bg-card/60 p-4 text-xs font-mono space-y-1.5" role="status" aria-label="Analysis outcome">
         <div className="flex items-center justify-between">
           <h3 className="font-semibold text-foreground">
-            {report.outcome ?? (spill ? "SPILL_DETECTED" : "ANALYSIS_INCONCLUSIVE")}
+            {outcome}
           </h3>
           <span className="text-muted-foreground">{report.status}</span>
         </div>
@@ -216,7 +268,7 @@ function InvestigationReport({ report }: { report: IncidentReport }) {
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
         <div className="rounded border border-border bg-card p-3 space-y-1">
           <span className="text-[10px] uppercase text-muted-foreground tracking-wider font-mono block">Signature</span>
-          <span className="text-xs font-bold text-foreground font-mono">{spill ? "Oil-Like Inferred" : "No Signature"}</span>
+          <span className="text-xs font-bold text-foreground font-mono">{presentation.signatureLabel}</span>
           {spill && (
             <span className="text-[9px] text-muted-foreground block mt-0.5 leading-tight">
               Experimental {report?.detector?.name ?? "hybrid"} detector<br/>
@@ -225,8 +277,8 @@ function InvestigationReport({ report }: { report: IncidentReport }) {
           )}
         </div>
         <div className="rounded border border-border bg-card p-3 space-y-1">
-          <span className="text-[10px] uppercase text-muted-foreground tracking-wider font-mono block">Spill Area</span>
-          <span className="text-sm font-bold text-foreground font-mono tabular-nums">{spill ? `${(spill.maskAreaKm2 ?? spill.metrics.areaKm2)} km²` : "—"}</span>
+          <span className="text-[10px] uppercase text-muted-foreground tracking-wider font-mono block">{presentation.areaLabel}</span>
+          <span className="text-sm font-bold text-foreground font-mono tabular-nums">{feature ? `${(feature.maskAreaKm2 ?? feature.metrics.areaKm2)} km²` : "—"}</span>
         </div>
         <div className="rounded border border-border bg-card p-3 space-y-1">
           <span className="text-[10px] uppercase text-muted-foreground tracking-wider font-mono block" title="Approximate interval based on available observations">Est. Observation Age</span>
@@ -258,10 +310,18 @@ function InvestigationReport({ report }: { report: IncidentReport }) {
               <div className="font-semibold text-foreground border-b border-border/50 pb-1">
                 EVIDENCE LAYERS
               </div>
-              <div className="flex items-center gap-2">
-                <span className="inline-block h-2 w-2 rounded-full bg-[#fb7185]" />
-                <span>Spill Detection</span>
-              </div>
+              {spill && (
+                <div className="flex items-center gap-2">
+                  <span className="inline-block h-2 w-2 rounded-full bg-[#fb7185]" />
+                  <span>Spill Detection</span>
+                </div>
+              )}
+              {candidateAnomalies.length > 0 && (
+                <div className="flex items-center gap-2">
+                  <span className="inline-block h-2 w-2 rounded-full bg-amber-400" />
+                  <span>Candidate Anomaly</span>
+                </div>
+              )}
               <div className="flex items-center gap-2">
                 <span className="inline-block h-2 w-2 rounded-full bg-amber-400" />
                 <span>Estimated Origin</span>
@@ -295,11 +355,23 @@ function InvestigationReport({ report }: { report: IncidentReport }) {
             />
           )}
 
-          {/* Spill polygons */}
-          {report.detections.map((d, i) => (
+          {/* Unconfirmed geometry remains visible as candidate anomalies. */}
+          {candidateAnomalies.map((d, i) => (
             <MapGeoJSON
-              key={i}
+              key={`candidate-${i}`}
               data={d.geometry}
+              style={{
+                color: "#fbbf24",
+                fillColor: "#fbbf24",
+                fillOpacity: 0.2,
+                weight: 2,
+                dashArray: "4 4",
+              }}
+            />
+          ))}
+          {spill && (
+            <MapGeoJSON
+              data={spill.geometry}
               style={{
                 color: "#fb7185",
                 fillColor: "#fb7185",
@@ -307,7 +379,7 @@ function InvestigationReport({ report }: { report: IncidentReport }) {
                 weight: 2,
               }}
             />
-          ))}
+          )}
 
           {/* Origin */}
           {origin && (
@@ -370,8 +442,14 @@ function InvestigationReport({ report }: { report: IncidentReport }) {
           ))}
 
           {/* Spill centroid */}
-          {spill && (
-            <Marker lon={spill.metrics.centroid.lon} lat={spill.metrics.centroid.lat} label="Detected Spill" pulse />
+          {feature && (
+            <Marker
+              lon={feature.metrics.centroid.lon}
+              lat={feature.metrics.centroid.lat}
+              label={presentation.markerLabel ?? "Candidate Anomaly"}
+              pulse={!!spill}
+              color={spill ? undefined : "var(--accent-amber)"}
+            />
           )}
         </OceanMap>
       </Panel>
@@ -585,13 +663,13 @@ function InvestigationReport({ report }: { report: IncidentReport }) {
           {/* Characterization & Age */}
           <div>
             <h4 className="font-semibold text-foreground mb-2">Characterization &amp; Age</h4>
-            {spill ? (
+            {feature ? (
               <div className="space-y-1">
                 <p className="text-xs">
-                  Perimeter: {spill.metrics.perimeterM.toFixed(0)} m<br />
-                  Length × width: {spill.metrics.lengthM.toFixed(0)} × {spill.metrics.widthM.toFixed(0)} m
+                  {spill ? "Perimeter" : "Candidate perimeter"}: {feature.metrics.perimeterM.toFixed(0)} m<br />
+                  Length × width: {feature.metrics.lengthM.toFixed(0)} × {feature.metrics.widthM.toFixed(0)} m
                 </p>
-                <KeyVal k="Geometry Method" v={spill.geometryMethod} />
+                <KeyVal k="Geometry Method" v={feature.geometryMethod} />
                 <p className="text-xs">
                   {age?.method.replaceAll("_", " ") ?? "Spill age unavailable"}
                 </p>

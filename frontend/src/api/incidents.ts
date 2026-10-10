@@ -55,6 +55,7 @@ export interface Detection {
   confidence: number;
   confidenceMeaning: string;
   geometryMethod: string;
+  passesOilEvidenceGate?: boolean;
 }
 export interface IncidentSummary {
   mode?: AnalysisMode;
@@ -151,6 +152,7 @@ export interface IncidentReport {
   mask: number[][];
   detections: Detection[];
   spill?: Detection | null;
+  candidateAnomalies?: Detection[];
   age?: {
     minHours: number;
     maxHours: number;

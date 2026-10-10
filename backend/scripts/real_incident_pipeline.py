@@ -127,7 +127,18 @@ def _analyze(payload):
         report["status"] = "no_candidates"
         stage("characterization", "not_applicable", "UNAVAILABLE", "No retained dark-slick candidates; not proof of clean water")
         return report
-    report["spill"] = next((d for d in sar["detections"] if d.get("passesOilEvidenceGate")), sar["detections"][0])
+    passing_detection = next(
+        (d for d in sar["detections"] if d.get("passesOilEvidenceGate") is True),
+        None,
+    )
+    if sar["detector"].get("outcome") == "SPILL_DETECTED" and passing_detection is not None:
+        report["spill"] = passing_detection
+        report["candidateAnomalies"] = [
+            d for d in sar["detections"] if d is not passing_detection
+        ]
+    else:
+        report["spill"] = None
+        report["candidateAnomalies"] = sar["detections"]
     report["provenance"]["geometry"] = "INFERRED from experimental segmentation; approximate metric characterization"
     stage("characterization", "completed", "INFERRED", "Native-resolution mask and simplified outer-contour geometry")
     report["stages"].append("characterization")
@@ -141,7 +152,8 @@ def _analyze(payload):
         else:
             env_provider = StrictEnvironmentProvider()
         with contextlib.closing(env_provider) as environment:
-            centroid = report["spill"]["metrics"]["centroid"]
+            analysis_detection = report["spill"] or report["candidateAnomalies"][0]
+            centroid = analysis_detection["metrics"]["centroid"]
             environment.get_environment(centroid["lat"], centroid["lon"], timestamp(scene["acquiredAt"]))
             report["environment"] = environment.meta
             if not getattr(environment, "has_wind", True):
