@@ -1,6 +1,14 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useState } from "react";
-import { KeyVal, Meter, Modal, OutcomeBadge, Panel, StatusDot } from "../components/ui-kit";
+import {
+  KeyVal,
+  Meter,
+  Modal,
+  OutcomeBadge,
+  Panel,
+  StatusDot,
+  ReportSkeleton,
+} from "../components/ui-kit";
 import { useIncident } from "../context/IncidentContext";
 import {
   Users,
@@ -53,21 +61,7 @@ function SuspectsPage() {
   const [openMmsi, setOpenMmsi] = useState<string | null>(null);
 
   if (autoLoading || historyLoading || isSwitchingIncident) {
-    return (
-      <div className="mx-auto max-w-4xl py-16 text-center space-y-4">
-        <div className="mx-auto flex h-14 w-14 items-center justify-center rounded border border-border bg-secondary">
-          <Users className="h-6 w-6 animate-spin text-primary" />
-        </div>
-        <div>
-          <h2 className="text-base font-semibold text-foreground font-mono">
-            Loading Attribution Rankings…
-          </h2>
-          <p className="text-xs text-muted-foreground mt-1">
-            Computing explainable multi-factor attribution compatibility.
-          </p>
-        </div>
-      </div>
-    );
+    return <ReportSkeleton />;
   }
 
   if (!activeReport) {
@@ -82,7 +76,8 @@ function SuspectsPage() {
             Candidate Vessel Attribution
           </h1>
           <p className="text-sm text-muted-foreground">
-            No active incident loaded. Select an incident from the header dropdown or run an analysis from the Investigation page.
+            No active incident loaded. Select an incident from the header dropdown or run an
+            analysis from the Investigation page.
           </p>
         </div>
         <Panel className="flex flex-col items-center justify-center p-12 text-center space-y-4">
@@ -246,28 +241,28 @@ function SuspectsPage() {
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 font-mono text-xs">
                     <div className="rounded border border-border/60 bg-secondary/40 p-2.5 space-y-1.5">
                       <Meter label="Proximity" value={proximityMeter} />
-                      <span className="text-[10px] text-muted-foreground block truncate">
+                      <span className="text-[11px] text-muted-foreground block truncate">
                         {c.closestDistanceKm} km away
                       </span>
                     </div>
 
                     <div className="rounded border border-border/60 bg-secondary/40 p-2.5 space-y-1.5">
                       <Meter label="Temporal" value={temporalMeter} />
-                      <span className="text-[10px] text-muted-foreground block truncate">
+                      <span className="text-[11px] text-muted-foreground block truncate">
                         &Delta;t: {c.timeDifferenceHours}h
                       </span>
                     </div>
 
                     <div className="rounded border border-border/60 bg-secondary/40 p-2.5 space-y-1.5">
                       <Meter label="AIS Quality" value={100 - aisGapMeter} tone="amber" />
-                      <span className="text-[10px] text-muted-foreground block truncate">
+                      <span className="text-[11px] text-muted-foreground block truncate">
                         {(c.aisContinuity * 100).toFixed(0)}% continuity
                       </span>
                     </div>
 
                     <div className="rounded border border-border/60 bg-secondary/40 p-2.5 space-y-1.5">
                       <Meter label="Vessel Type" value={vesselTypeMeter} tone="emerald" />
-                      <span className="text-[10px] text-muted-foreground block truncate">
+                      <span className="text-[11px] text-muted-foreground block truncate">
                         {c.type}
                       </span>
                     </div>
@@ -327,7 +322,7 @@ function SuspectsPage() {
       <Panel
         title="Source Attribution Methodology &middot; Objective Standards"
         badge={
-          <span className="rounded bg-secondary/80 px-1.5 py-0.2 text-[9px] font-mono text-muted-foreground uppercase">
+          <span className="rounded bg-secondary/80 px-1.5 py-0.2 text-[10px] font-mono text-muted-foreground uppercase">
             Protocol
           </span>
         }
@@ -414,13 +409,13 @@ function SuspectsPage() {
                       <span>{a.durationHours}h unobserved corridor</span>
                       <span className="text-amber-300">Relevance: {a.anomalyScore}</span>
                     </div>
-                    <div className="text-muted-foreground text-[10px] mt-0.5">{a.label}</div>
+                    <div className="text-muted-foreground text-[11px] mt-0.5">{a.label}</div>
                   </div>
                 ))}
               </div>
             )}
 
-            <p className="text-[10px] text-muted-foreground italic pt-2">
+            <p className="text-[11px] text-muted-foreground italic pt-2">
               Physical compatibility score &middot; Not legal attribution or proof of spill release.
             </p>
           </div>

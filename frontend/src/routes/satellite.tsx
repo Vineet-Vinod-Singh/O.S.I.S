@@ -1,8 +1,24 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
-import { OceanMap, Marker, MapRectangle, MapImageOverlay, MapGeoJSON } from "../components/OceanMap";
+import {
+  OceanMap,
+  Marker,
+  MapRectangle,
+  MapImageOverlay,
+  MapGeoJSON,
+} from "../components/OceanMap";
+import * as ToggleGroup from "@radix-ui/react-toggle-group";
+import * as Collapsible from "@radix-ui/react-collapsible";
 
-import { KeyVal, Modal, OutcomeBadge, Panel, Stat, StatusDot } from "../components/ui-kit";
+import {
+  KeyVal,
+  Modal,
+  OutcomeBadge,
+  Panel,
+  Stat,
+  StatusDot,
+  ReportSkeleton,
+} from "../components/ui-kit";
 import { useIncident } from "../context/IncidentContext";
 import {
   Radar,
@@ -90,21 +106,7 @@ function SatellitePage() {
   const [sarViewMode, setSarViewMode] = useState<"vv" | "composite" | "candidates">("vv");
 
   if (autoLoading || historyLoading || isSwitchingIncident) {
-    return (
-      <div className="mx-auto max-w-4xl py-16 text-center space-y-4">
-        <div className="mx-auto flex h-14 w-14 items-center justify-center rounded border border-border bg-secondary">
-          <Radar className="h-6 w-6 animate-spin text-[var(--accent-blue)]" />
-        </div>
-        <div>
-          <h2 className="text-base font-semibold text-foreground font-mono">
-            Loading Satellite Observation…
-          </h2>
-          <p className="text-xs text-muted-foreground mt-1">
-            Retrieving radar backscatter matrix and geometric detections.
-          </p>
-        </div>
-      </div>
-    );
+    return <ReportSkeleton />;
   }
 
   if (!activeReport) {
@@ -119,7 +121,8 @@ function SatellitePage() {
             SAR Detection Analysis
           </h1>
           <p className="text-sm text-muted-foreground">
-            No active incident loaded. Select an incident from the header dropdown or run an analysis from the Investigation page.
+            No active incident loaded. Select an incident from the header dropdown or run an
+            analysis from the Investigation page.
           </p>
         </div>
         <Panel className="flex flex-col items-center justify-center p-12 text-center space-y-4">
@@ -176,7 +179,6 @@ function SatellitePage() {
     : scene.bbox
       ? [(scene.bbox[1] + scene.bbox[3]) / 2, (scene.bbox[0] + scene.bbox[2]) / 2]
       : [15.25, 72.45];
-
 
   return (
     <div className="space-y-6">
@@ -249,7 +251,7 @@ function SatellitePage() {
             </div>
             <p className="text-xs text-muted-foreground max-w-3xl">
               {isSpillDetected
-                ? `Sentinel-1 SAR backscatter analysis resolved a distinct low-backscatter dark anomaly measuring ${(spill.maskAreaKm2 ?? spill.metrics.areaKm2)} km² with ${(spill.confidence * 100).toFixed(0)}% algorithmic confidence.`
+                ? `Sentinel-1 SAR backscatter analysis resolved a distinct low-backscatter dark anomaly measuring ${spill.maskAreaKm2 ?? spill.metrics.areaKm2} km² with ${(spill.confidence * 100).toFixed(0)}% algorithmic confidence.`
                 : isNoSpill
                   ? "Sentinel-1 SAR scene backscatter analysis verified normal oceanic capillary wave roughness with no anomalous dark slicks meeting threshold criteria."
                   : report.outcomeMessage ||
@@ -266,7 +268,9 @@ function SatellitePage() {
             <div className="flex items-center gap-4 text-right">
               <div>
                 <div className="text-[10px] uppercase text-muted-foreground">Area</div>
-                <div className="text-base font-bold text-foreground">{(spill.maskAreaKm2 ?? spill.metrics.areaKm2)} km²</div>
+                <div className="text-base font-bold text-foreground">
+                  {spill.maskAreaKm2 ?? spill.metrics.areaKm2} km²
+                </div>
               </div>
               <div>
                 <div className="text-[10px] uppercase text-muted-foreground">Confidence</div>
@@ -285,7 +289,7 @@ function SatellitePage() {
         <Panel
           title="Satellite Scene Cartography"
           badge={
-            <span className="rounded bg-secondary/80 px-1.5 py-0.2 text-[9px] font-mono text-muted-foreground uppercase">
+            <span className="rounded bg-secondary/80 px-1.5 py-0.2 text-[10px] font-mono text-muted-foreground uppercase">
               Sensor Spatial Window
             </span>
           }
@@ -315,7 +319,7 @@ function SatellitePage() {
                 <div>
                   {scene.source} &middot; {utc(scene.acquiredAt)}
                 </div>
-                <div className="text-[10px] text-muted-foreground pt-0.5">
+                <div className="text-[11px] text-muted-foreground pt-0.5">
                   {hasPolygon
                     ? "Dark-slick signature segmented against ambient sea clutter"
                     : isKarnataka
@@ -336,14 +340,20 @@ function SatellitePage() {
                     {isKarnataka && (
                       <MapImageOverlay
                         url={karnatakaImageUrl}
-                        bounds={[[south, west], [north, east]]}
+                        bounds={[
+                          [south, west],
+                          [north, east],
+                        ]}
                         opacity={0.85}
                       />
                     )}
                     <MapRectangle
                       aria-label="Analyzed scene footprint"
                       title="Analyzed scene footprint"
-                      bounds={[[south, west], [north, east]]}
+                      bounds={[
+                        [south, west],
+                        [north, east],
+                      ]}
                       pathOptions={{
                         color: "#38bdf8",
                         weight: 1.5,
@@ -374,7 +384,7 @@ function SatellitePage() {
               <Marker
                 lat={spill.metrics.centroid.lat}
                 lon={spill.metrics.centroid.lon}
-                label={`Slick Centroid (${(spill.maskAreaKm2 ?? spill.metrics.areaKm2)} km²)`}
+                label={`Slick Centroid (${spill.maskAreaKm2 ?? spill.metrics.areaKm2} km²)`}
                 pulse
               />
             )}
@@ -398,7 +408,7 @@ function SatellitePage() {
           <Panel
             title="Slick Geometry &amp; Metrics"
             badge={
-              <span className="rounded bg-secondary/80 px-1.5 py-0.2 text-[9px] font-mono text-muted-foreground uppercase">
+              <span className="rounded bg-secondary/80 px-1.5 py-0.2 text-[10px] font-mono text-muted-foreground uppercase">
                 Measurements
               </span>
             }
@@ -408,7 +418,7 @@ function SatellitePage() {
                 <div className="grid grid-cols-2 gap-3">
                   <Stat
                     label="Slick Area"
-                    value={`${(spill.maskAreaKm2 ?? spill.metrics.areaKm2)} km²`}
+                    value={`${spill.maskAreaKm2 ?? spill.metrics.areaKm2} km²`}
                     hint="Segmented surface"
                     highlight="cyan"
                   />
@@ -469,7 +479,7 @@ function SatellitePage() {
           <Panel
             title="SAR Radiometric Preview"
             badge={
-              <span className="rounded bg-secondary/80 px-1.5 py-0.2 text-[9px] font-mono text-muted-foreground uppercase">
+              <span className="rounded bg-secondary/80 px-1.5 py-0.2 text-[10px] font-mono text-muted-foreground uppercase">
                 {isKarnataka
                   ? "Real SAR Imagery"
                   : isInconclusiveScenario
@@ -480,41 +490,33 @@ function SatellitePage() {
           >
             {isKarnataka ? (
               <div className="space-y-3">
-                <div className="flex rounded border border-border/70 bg-secondary/40 p-0.5 text-[10px] font-mono">
-                  <button
-                    type="button"
-                    onClick={() => setSarViewMode("vv")}
-                    className={`flex-1 rounded py-1 transition-colors cursor-pointer ${
-                      sarViewMode === "vv"
-                        ? "bg-card text-foreground font-semibold shadow-sm"
-                        : "text-muted-foreground hover:text-foreground"
-                    }`}
+                <ToggleGroup.Root
+                  type="single"
+                  value={sarViewMode}
+                  onValueChange={(val) => {
+                    if (val) setSarViewMode(val as "vv" | "composite" | "candidates");
+                  }}
+                  className="flex rounded border border-border/70 bg-secondary/40 p-0.5 text-[11px] font-mono"
+                >
+                  <ToggleGroup.Item
+                    value="vv"
+                    className="flex-1 rounded py-1 transition-colors cursor-pointer text-muted-foreground hover:text-foreground data-[state=on]:bg-card data-[state=on]:text-foreground data-[state=on]:font-semibold data-[state=on]:shadow-sm outline-none"
                   >
                     Calibrated VV (dB)
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setSarViewMode("composite")}
-                    className={`flex-1 rounded py-1 transition-colors cursor-pointer ${
-                      sarViewMode === "composite"
-                        ? "bg-card text-foreground font-semibold shadow-sm"
-                        : "text-muted-foreground hover:text-foreground"
-                    }`}
+                  </ToggleGroup.Item>
+                  <ToggleGroup.Item
+                    value="composite"
+                    className="flex-1 rounded py-1 transition-colors cursor-pointer text-muted-foreground hover:text-foreground data-[state=on]:bg-card data-[state=on]:text-foreground data-[state=on]:font-semibold data-[state=on]:shadow-sm outline-none"
                   >
                     Dual-Pol Composite
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setSarViewMode("candidates")}
-                    className={`flex-1 rounded py-1 transition-colors cursor-pointer ${
-                      sarViewMode === "candidates"
-                        ? "bg-card text-foreground font-semibold shadow-sm"
-                        : "text-muted-foreground hover:text-foreground"
-                    }`}
+                  </ToggleGroup.Item>
+                  <ToggleGroup.Item
+                    value="candidates"
+                    className="flex-1 rounded py-1 transition-colors cursor-pointer text-muted-foreground hover:text-foreground data-[state=on]:bg-card data-[state=on]:text-foreground data-[state=on]:font-semibold data-[state=on]:shadow-sm outline-none"
                   >
                     Coastline Mask
-                  </button>
-                </div>
+                  </ToggleGroup.Item>
+                </ToggleGroup.Root>
                 <div className="relative overflow-hidden rounded border border-border/80 bg-secondary shadow-inner">
                   <img
                     src={karnatakaImageUrl}
@@ -527,7 +529,7 @@ function SatellitePage() {
                     }
                     className="w-full aspect-square object-contain"
                   />
-                  <div className="absolute bottom-1.5 right-1.5 rounded bg-black/80 px-1.5 py-0.5 text-[9px] font-mono text-cyan-300">
+                  <div className="absolute bottom-1.5 right-1.5 rounded bg-black/80 px-1.5 py-0.5 text-[11px] font-mono text-cyan-300">
                     512×512 px · ~17.3m/px
                   </div>
                 </div>
@@ -535,11 +537,10 @@ function SatellitePage() {
                   <p className="text-foreground font-semibold">
                     Real Sentinel-1A SAR Observation (19 June 2024)
                   </p>
-                  <p>
-                    Sensor: Sentinel-1A C-band SAR (IW mode) off Karnataka coast.
-                  </p>
-                  <p className="text-[10px] text-muted-foreground/80">
-                    Note: Numerical floating-point matrix archived in source GeoTIFF (512×512 native); calibrated radiometric visualization rendered above.
+                  <p>Sensor: Sentinel-1A C-band SAR (IW mode) off Karnataka coast.</p>
+                  <p className="text-[11px] text-muted-foreground/80">
+                    Note: Numerical floating-point matrix archived in source GeoTIFF (512×512
+                    native); calibrated radiometric visualization rendered above.
                   </p>
                 </div>
               </div>
@@ -550,9 +551,10 @@ function SatellitePage() {
                   <span>Insufficient / Unavailable SAR Evidence</span>
                 </div>
                 <p className="text-muted-foreground text-[11px]">
-                  SAR backscatter coverage in this synthetic scenario is absent (0% valid ocean pixels).
+                  SAR backscatter coverage in this synthetic scenario is absent (0% valid ocean
+                  pixels).
                 </p>
-                <div className="rounded bg-secondary/50 p-2 text-[10px] text-muted-foreground text-left space-y-0.5">
+                <div className="rounded bg-secondary/50 p-2 text-[11px] text-muted-foreground text-left space-y-0.5">
                   <p>• Coverage status: Absent / Below quality threshold</p>
                   <p>• Pipeline behavior: Strictly rejects ungrounded candidate generation</p>
                   <p>• Final result: ANALYSIS INCONCLUSIVE</p>
@@ -572,7 +574,7 @@ function SatellitePage() {
                 <p className="text-[11px]">
                   Raw numerical floating-point grid omitted from incident JSON payload.
                 </p>
-                <p className="text-[10px] text-muted-foreground/70">
+                <p className="text-[11px] text-muted-foreground/70">
                   SAR imagery remains available in source GeoTIFF archive.
                 </p>
               </div>
@@ -580,37 +582,40 @@ function SatellitePage() {
           </Panel>
 
           {/* Detector Information - Collapsible Methodology */}
-          <div className="rounded border border-border bg-card">
-            <button
-              type="button"
-              onClick={() => setShowMethodology(!showMethodology)}
-              className="w-full flex items-center justify-between px-4 py-3 text-left hover:bg-secondary/40 transition-colors"
-            >
-              <span className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground font-mono">
-                Methodology &amp; Quality Notes
-              </span>
-              <span className="text-[10px] font-mono text-[var(--accent-blue)]">
-                {showMethodology ? "Hide" : "Show"}
-              </span>
-            </button>
-            {showMethodology && (
-              <div className="border-t border-border/70 p-4 space-y-2 text-xs font-mono text-muted-foreground">
-                <p className="leading-relaxed">
-                  {report.mode === "REAL" || report.mode === "UPLOAD"
-                    ? `Experimental ${detector?.name ?? "unavailable"} detector. Uncalibrated scores — not confirmed oil or probability of oil.`
-                    : "Speckle median filtering → dark-region thresholding → connected component clustering → convex hull extraction."}
-                </p>
-                {detector?.status && (
-                  <div className="border-t border-border/50 pt-2 text-[11px]">
-                    <span>
-                      Status: <strong className="text-foreground">{detector.status}</strong>
-                    </span>
-                    {detector.version ? ` · Version: ${detector.version}` : ""}
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
+          <Collapsible.Root
+            open={showMethodology}
+            onOpenChange={setShowMethodology}
+            className="rounded border border-border bg-card"
+          >
+            <Collapsible.Trigger asChild>
+              <button
+                type="button"
+                className="w-full flex items-center justify-between px-4 py-3 text-left hover:bg-secondary/40 transition-colors outline-none focus-visible:bg-secondary/40"
+              >
+                <span className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground font-mono">
+                  Methodology &amp; Quality Notes
+                </span>
+                <span className="text-[11px] font-mono text-[var(--accent-blue)]">
+                  {showMethodology ? "Hide" : "Show"}
+                </span>
+              </button>
+            </Collapsible.Trigger>
+            <Collapsible.Content className="border-t border-border/70 p-4 space-y-2 text-xs font-mono text-muted-foreground data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[state=closed]:slide-out-to-top-2 data-[state=open]:slide-in-from-top-2">
+              <p className="leading-relaxed">
+                {report.mode === "REAL" || report.mode === "UPLOAD"
+                  ? `Experimental ${detector?.name ?? "unavailable"} detector. Uncalibrated scores — not confirmed oil or probability of oil.`
+                  : "Speckle median filtering → dark-region thresholding → connected component clustering → convex hull extraction."}
+              </p>
+              {detector?.status && (
+                <div className="border-t border-border/50 pt-2 text-[11px]">
+                  <span>
+                    Status: <strong className="text-foreground">{detector.status}</strong>
+                  </span>
+                  {detector.version ? ` · Version: ${detector.version}` : ""}
+                </div>
+              )}
+            </Collapsible.Content>
+          </Collapsible.Root>
         </div>
       </div>
 
@@ -627,7 +632,10 @@ function SatellitePage() {
               k="Centroid Coordinates"
               v={`${spill.metrics.centroid.lat.toFixed(5)}° N, ${spill.metrics.centroid.lon.toFixed(5)}° E`}
             />
-            <KeyVal k="Spill Surface Area" v={`${(spill.maskAreaKm2 ?? spill.metrics.areaKm2)} km²`} />
+            <KeyVal
+              k="Spill Surface Area"
+              v={`${spill.maskAreaKm2 ?? spill.metrics.areaKm2} km²`}
+            />
             <KeyVal k="Perimeter Length" v={`${spill.metrics.perimeterM.toFixed(0)} m`} />
             <KeyVal
               k="Axes (Length × Width)"

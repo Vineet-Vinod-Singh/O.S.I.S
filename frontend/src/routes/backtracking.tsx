@@ -2,8 +2,10 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useState } from "react";
 import { Marker, OceanMap, MapPolyline, MapCircle } from "../components/OceanMap";
 
-import { KeyVal, OutcomeBadge, Panel, Stat, StatusDot } from "../components/ui-kit";
+import { KeyVal, OutcomeBadge, Panel, Stat, StatusDot, ReportSkeleton } from "../components/ui-kit";
 import { useIncident } from "../context/IncidentContext";
+import * as ToggleGroup from "@radix-ui/react-toggle-group";
+import * as Collapsible from "@radix-ui/react-collapsible";
 import {
   Compass,
   Clock,
@@ -49,21 +51,7 @@ function BacktrackingPage() {
   const [showEnvDetails, setShowEnvDetails] = useState(false);
 
   if (autoLoading || historyLoading || isSwitchingIncident) {
-    return (
-      <div className="mx-auto max-w-4xl py-16 text-center space-y-4">
-        <div className="mx-auto flex h-14 w-14 items-center justify-center rounded border border-border bg-secondary">
-          <Compass className="h-6 w-6 animate-spin text-[var(--accent-amber)]" />
-        </div>
-        <div>
-          <h2 className="text-base font-semibold text-foreground font-mono">
-            Loading Hydrodynamic Drift Simulation…
-          </h2>
-          <p className="text-xs text-muted-foreground mt-1">
-            Running Runge-Kutta Lagrangian particle advection.
-          </p>
-        </div>
-      </div>
-    );
+    return <ReportSkeleton />;
   }
 
   if (!activeReport) {
@@ -78,7 +66,8 @@ function BacktrackingPage() {
             Lagrangian Drift Simulation
           </h1>
           <p className="text-sm text-muted-foreground">
-            No active incident loaded. Select an incident from the header dropdown or run an analysis from the Investigation page.
+            No active incident loaded. Select an incident from the header dropdown or run an
+            analysis from the Investigation page.
           </p>
         </div>
         <Panel className="flex flex-col items-center justify-center p-12 text-center space-y-4">
@@ -127,10 +116,13 @@ function BacktrackingPage() {
           ]
         : [15.25, 72.45];
 
-
   // Derive human-readable environmental variables
-  const currentSpeed = environment["current_speed"] ?? environment["current_velocity"] ?? environment["surface_current_mps"];
-  const windSpeed = environment["wind_speed"] ?? environment["wind_speed_mps"] ?? environment["wind_velocity"];
+  const currentSpeed =
+    environment["current_speed"] ??
+    environment["current_velocity"] ??
+    environment["surface_current_mps"];
+  const windSpeed =
+    environment["wind_speed"] ?? environment["wind_speed_mps"] ?? environment["wind_velocity"];
   const waveHeight = environment["wave_height"] ?? environment["significant_wave_height_m"];
 
   return (
@@ -146,7 +138,8 @@ function BacktrackingPage() {
             Spill Drift Modeling &amp; Trajectory
           </h1>
           <p className="text-xs text-muted-foreground pt-0.5">
-            What happens if we track the spill backward to its source, or forward to predict its spread?
+            What happens if we track the spill backward to its source, or forward to predict its
+            spread?
           </p>
         </div>
         <OutcomeBadge outcome={outcome ?? report.status} />
@@ -162,7 +155,8 @@ function BacktrackingPage() {
           <p className="text-muted-foreground">
             {isNoSpill
               ? "Hydrodynamic drift backtracking is not executed when no oil spill is detected on the surface."
-              : report.outcomeMessage || "Drift analysis inconclusive due to indeterminate surface spill geometry."}
+              : report.outcomeMessage ||
+                "Drift analysis inconclusive due to indeterminate surface spill geometry."}
           </p>
           {report.outcomeReason && (
             <p className="text-muted-foreground/80 italic">{report.outcomeReason}</p>
@@ -189,38 +183,32 @@ function BacktrackingPage() {
             </p>
           </div>
 
-          <div className="inline-flex rounded border border-border bg-secondary/80 p-1 self-start sm:self-auto font-mono text-xs">
-            <button
-              type="button"
-              onClick={() => {
-                setDirection("backward");
+          <ToggleGroup.Root
+            type="single"
+            value={direction}
+            onValueChange={(val) => {
+              if (val && val !== direction) {
+                setDirection(val as "backward" | "forward");
                 setSliderIndex(0);
-              }}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded font-semibold transition-colors ${
-                direction === "backward"
-                  ? "bg-amber-500/20 text-amber-300 border border-amber-500/30"
-                  : "text-muted-foreground hover:text-foreground border border-transparent"
-              }`}
+              }
+            }}
+            className="inline-flex rounded border border-border bg-secondary/80 p-1 self-start sm:self-auto font-mono text-xs"
+          >
+            <ToggleGroup.Item
+              value="backward"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded font-semibold transition-colors outline-none border border-transparent text-muted-foreground hover:text-foreground data-[state=on]:bg-amber-500/20 data-[state=on]:text-amber-300 data-[state=on]:border-amber-500/30"
             >
               <RotateCcw className="h-3.5 w-3.5" />
               <span>Backward (Origin)</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                setDirection("forward");
-                setSliderIndex(0);
-              }}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded font-semibold transition-colors ${
-                direction === "forward"
-                  ? "bg-[var(--primary)]/20 text-[var(--accent-blue)] border border-[var(--primary)]/30"
-                  : "text-muted-foreground hover:text-foreground border border-transparent"
-              }`}
+            </ToggleGroup.Item>
+            <ToggleGroup.Item
+              value="forward"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded font-semibold transition-colors outline-none border border-transparent text-muted-foreground hover:text-foreground data-[state=on]:bg-[var(--primary)]/20 data-[state=on]:text-[var(--accent-blue)] data-[state=on]:border-[var(--primary)]/30"
             >
               <Navigation className="h-3.5 w-3.5" />
               <span>Forward (Forecast)</span>
-            </button>
-          </div>
+            </ToggleGroup.Item>
+          </ToggleGroup.Root>
         </div>
       )}
 
@@ -233,7 +221,7 @@ function BacktrackingPage() {
               : `Forward Hydrodynamic Forecast (+${report.forecastHours}h Spread)`
           }
           badge={
-            <span className="rounded bg-secondary/80 px-1.5 py-0.2 text-[9px] font-mono text-muted-foreground uppercase">
+            <span className="rounded bg-secondary/80 px-1.5 py-0.2 text-[10px] font-mono text-muted-foreground uppercase">
               {direction === "backward" ? "RK4 Reverse Advection" : "Eulerian-Lagrangian Forward"}
             </span>
           }
@@ -267,15 +255,16 @@ function BacktrackingPage() {
                           : "border-cyan-400"
                       }`}
                     />
-                    <span>
-                      {direction === "backward" ? "Reverse Drift Path" : "Forecast Path"}
-                    </span>
+                    <span>{direction === "backward" ? "Reverse Drift Path" : "Forecast Path"}</span>
                   </div>
                 )}
                 {point && (
                   <div className="flex items-center gap-2">
                     <span className="inline-block h-2.5 w-2.5 rounded-full bg-white" />
-                    <span>Scrubbed Position (t = {point.hours > 0 ? `+${point.hours.toFixed(0)}` : point.hours.toFixed(0)}h)</span>
+                    <span>
+                      Scrubbed Position (t ={" "}
+                      {point.hours > 0 ? `+${point.hours.toFixed(0)}` : point.hours.toFixed(0)}h)
+                    </span>
                   </div>
                 )}
               </div>
@@ -357,7 +346,10 @@ function BacktrackingPage() {
               <div className="flex items-baseline justify-between text-xs">
                 <span className="uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
                   <Clock className="h-3.5 w-3.5 text-primary" />
-                  <span>Timeline Scrubber ({direction === "backward" ? "Reverse Hours" : "Forecast Hours"})</span>
+                  <span>
+                    Timeline Scrubber (
+                    {direction === "backward" ? "Reverse Hours" : "Forecast Hours"})
+                  </span>
                 </span>
                 <span className="font-bold text-foreground tabular-nums">
                   {point
@@ -381,8 +373,18 @@ function BacktrackingPage() {
               <div className="flex justify-between text-[11px] text-muted-foreground">
                 <span>t = 0h (Satellite Detection)</span>
                 {activePath[MAX_IDX] && (
-                  <span className={direction === "backward" ? "text-[var(--accent-amber)] font-medium" : "text-cyan-400 font-medium"}>
-                    t = {activePath[MAX_IDX].hours > 0 ? `+${activePath[MAX_IDX].hours.toFixed(0)}` : activePath[MAX_IDX].hours.toFixed(0)}h ({direction === "backward" ? "Origin" : "End Forecast"})
+                  <span
+                    className={
+                      direction === "backward"
+                        ? "text-[var(--accent-amber)] font-medium"
+                        : "text-cyan-400 font-medium"
+                    }
+                  >
+                    t ={" "}
+                    {activePath[MAX_IDX].hours > 0
+                      ? `+${activePath[MAX_IDX].hours.toFixed(0)}`
+                      : activePath[MAX_IDX].hours.toFixed(0)}
+                    h ({direction === "backward" ? "Origin" : "End Forecast"})
                   </span>
                 )}
               </div>
@@ -426,9 +428,11 @@ function BacktrackingPage() {
         <div className="space-y-5 font-mono">
           {/* Origin / Spread Target Card */}
           <Panel
-            title={direction === "backward" ? "Estimated Origin Region" : "Spread Forecast Telemetry"}
+            title={
+              direction === "backward" ? "Estimated Origin Region" : "Spread Forecast Telemetry"
+            }
             badge={
-              <span className="rounded bg-secondary/80 px-1.5 py-0.2 text-[9px] font-mono text-muted-foreground uppercase">
+              <span className="rounded bg-secondary/80 px-1.5 py-0.2 text-[10px] font-mono text-muted-foreground uppercase">
                 {direction === "backward" ? "Source Cell" : "Advection Vector"}
               </span>
             }
@@ -449,7 +453,8 @@ function BacktrackingPage() {
                   <div className="rounded border border-amber-500/30 bg-amber-500/5 p-2.5 text-[11px] text-amber-200/90 flex items-start gap-2">
                     <ShieldAlert className="h-4 w-4 shrink-0 text-amber-400 mt-0.5" />
                     <span>
-                      Sensitivity radius represents hydrodynamic dispersion uncertainty, not a definitive legal boundary.
+                      Sensitivity radius represents hydrodynamic dispersion uncertainty, not a
+                      definitive legal boundary.
                     </span>
                   </div>
                 </div>
@@ -464,13 +469,17 @@ function BacktrackingPage() {
                 <KeyVal k="Simulation Steps" v={`${forwardPath.length} intervals`} />
                 {point && (
                   <>
-                    <KeyVal k="Step Coordinates" v={`${point.lat.toFixed(4)}°N, ${point.lon.toFixed(4)}°E`} />
+                    <KeyVal
+                      k="Step Coordinates"
+                      v={`${point.lat.toFixed(4)}°N, ${point.lon.toFixed(4)}°E`}
+                    />
                     <KeyVal k="Step Timestamp" v={utc(point.timestamp)} />
                     <KeyVal k="Step Dispersion" v={`±${point.uncertaintyKm} km`} />
                   </>
                 )}
                 <div className="rounded border border-cyan-500/30 bg-cyan-500/5 p-2.5 text-[11px] text-cyan-200/90">
-                  Forward advection forecasts trajectory under prevailing CMEMS currents and wind forcing.
+                  Forward advection forecasts trajectory under prevailing CMEMS currents and wind
+                  forcing.
                 </div>
               </div>
             )}
@@ -480,7 +489,7 @@ function BacktrackingPage() {
           <Panel
             title="Environmental Forcing Summary"
             badge={
-              <span className="rounded bg-secondary/80 px-1.5 py-0.2 text-[9px] font-mono text-muted-foreground uppercase">
+              <span className="rounded bg-secondary/80 px-1.5 py-0.2 text-[10px] font-mono text-muted-foreground uppercase">
                 Observed Forcing
               </span>
             }
@@ -504,7 +513,9 @@ function BacktrackingPage() {
               </div>
               <div className="flex items-center justify-between border-b border-border/50 pb-2">
                 <span className="text-muted-foreground">Advection Integration</span>
-                <span className="font-semibold text-foreground font-mono">4th-order Runge-Kutta</span>
+                <span className="font-semibold text-foreground font-mono">
+                  4th-order Runge-Kutta
+                </span>
               </div>
               <div className="flex items-center justify-between">
                 <span className="text-muted-foreground">Windage Leeway</span>
@@ -513,24 +524,26 @@ function BacktrackingPage() {
 
               {/* Collapsible Model Details */}
               {environment && Object.keys(environment).length > 0 && (
-                <div className="pt-2 border-t border-border/60">
-                  <button
-                    type="button"
-                    onClick={() => setShowEnvDetails(!showEnvDetails)}
-                    className="w-full flex items-center justify-between py-1 text-[11px] text-[var(--accent-blue)] hover:underline"
-                  >
-                    <span>{showEnvDetails ? "Hide" : "Show"} Environmental Model Details</span>
-                    <span>{showEnvDetails ? "▲" : "▼"}</span>
-                  </button>
-
-                  {showEnvDetails && (
-                    <div className="mt-2 space-y-1.5 pt-2 border-t border-border/40 text-[11px] text-muted-foreground">
-                      {Object.entries(environment).map(([k, v]) => (
-                        <KeyVal key={k} k={k.replaceAll("_", " ")} v={String(v)} />
-                      ))}
-                    </div>
-                  )}
-                </div>
+                <Collapsible.Root
+                  open={showEnvDetails}
+                  onOpenChange={setShowEnvDetails}
+                  className="pt-2 border-t border-border/60"
+                >
+                  <Collapsible.Trigger asChild>
+                    <button
+                      type="button"
+                      className="w-full flex items-center justify-between py-1 text-[11px] text-[var(--accent-blue)] hover:underline outline-none"
+                    >
+                      <span>{showEnvDetails ? "Hide" : "Show"} Environmental Model Details</span>
+                      <span>{showEnvDetails ? "▲" : "▼"}</span>
+                    </button>
+                  </Collapsible.Trigger>
+                  <Collapsible.Content className="mt-2 space-y-1.5 pt-2 border-t border-border/40 text-[11px] text-muted-foreground data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0">
+                    {Object.entries(environment).map(([k, v]) => (
+                      <KeyVal key={k} k={k.replaceAll("_", " ")} v={String(v)} />
+                    ))}
+                  </Collapsible.Content>
+                </Collapsible.Root>
               )}
             </div>
           </Panel>
@@ -539,8 +552,8 @@ function BacktrackingPage() {
           <Panel title="Attribution Workflow">
             <div className="space-y-2 text-xs text-muted-foreground">
               <p className="leading-relaxed">
-                The computed release origin and temporal release window directly constrain
-                the spatiotemporal search corridor for AIS vessel correlation.
+                The computed release origin and temporal release window directly constrain the
+                spatiotemporal search corridor for AIS vessel correlation.
               </p>
               <Link
                 to="/ais"

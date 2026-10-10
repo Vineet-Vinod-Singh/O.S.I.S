@@ -92,6 +92,10 @@ test('AIS Service - Mocked WebSocket Reconnect & Parsing', async () => {
     try {
         process.env.AISSTREAM_API_KEY = 'mock-key';
         process.env.AISSTREAM_URL = `ws://localhost:${port}`;
+        process.env.POLLER_PRIORITY_AREAS_JSON = JSON.stringify([
+            { id: "test_region1", bbox: [50.0, 10.0, 60.0, 20.0] },
+            { id: "test_region2", bbox: [60.0, 20.0, 70.0, 30.0] }
+        ]);
         aisService.start();
 
         await new Promise(resolve => setTimeout(resolve, 50));

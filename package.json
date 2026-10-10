@@ -1,0 +1,15 @@
+{
+  "name": "osis-qa",
+  "version": "1.0.0",
+  "description": "O.S.I.S QA Root Scripts",
+  "scripts": {
+    "dev": "npx concurrently \"npm run dev --prefix backend\" \"npm run dev --prefix frontend\"",
+    "test": "npx concurrently \"npm run test --prefix backend\" \"npm run test --prefix frontend\"",
+    "test:e2e": "npm run test:e2e --prefix frontend",
+    "qa": "node qa-runner.js",
+    "qa:tinyfish": "node frontend/tinyfish-qa.js"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  }
+}

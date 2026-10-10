@@ -1,4 +1,6 @@
 import { useEffect, type ReactNode } from "react";
+import * as Dialog from "@radix-ui/react-dialog";
+import { CheckCircle2, HelpCircle, Circle, ChevronRight } from "lucide-react";
 
 export function Panel({
   title,
@@ -32,6 +34,47 @@ export function Panel({
   );
 }
 
+export type Tone = "cyan" | "amber" | "emerald" | "rose" | "default";
+
+export const TONE_MAP = {
+  cyan: {
+    border: "border-[var(--accent-cyan)]",
+    text: "text-[var(--accent-cyan)]",
+    bg: "bg-[var(--accent-cyan)]",
+    bgMuted: "bg-[var(--accent-cyan)]/10",
+    borderMuted: "border-[var(--accent-cyan)]/40",
+  },
+  amber: {
+    border: "border-[var(--accent-amber)]",
+    text: "text-[var(--accent-amber)]",
+    bg: "bg-[var(--accent-amber)]",
+    bgMuted: "bg-[var(--accent-amber)]/10",
+    borderMuted: "border-[var(--accent-amber)]/40",
+  },
+  emerald: {
+    border: "border-[var(--accent-emerald)]",
+    text: "text-[var(--accent-emerald)]",
+    bg: "bg-[var(--accent-emerald)]",
+    bgMuted: "bg-[var(--accent-emerald)]/10",
+    borderMuted: "border-[var(--accent-emerald)]/40",
+  },
+  rose: {
+    border: "border-[var(--accent-rose)]",
+    text: "text-[var(--accent-rose)]",
+    bg: "bg-[var(--accent-rose)]",
+    bgMuted: "bg-[var(--accent-rose)]/10",
+    borderMuted: "border-[var(--accent-rose)]/40",
+  },
+  default: {
+    border: "border-border",
+    text: "text-foreground",
+    textMuted: "text-muted-foreground",
+    bg: "bg-muted-foreground",
+    bgMuted: "bg-secondary/60",
+    borderMuted: "border-border",
+  },
+};
+
 export function Stat({
   label,
   value,
@@ -41,29 +84,12 @@ export function Stat({
   label: string;
   value: ReactNode;
   hint?: string;
-  highlight?: "cyan" | "amber" | "emerald" | "rose" | undefined;
+  highlight?: Tone | undefined;
 }) {
-  const borderClass =
-    highlight === "cyan"
-      ? "border-[var(--accent-blue)]"
-      : highlight === "amber"
-        ? "border-amber-400"
-        : highlight === "emerald"
-          ? "border-emerald-400"
-          : highlight === "rose"
-            ? "border-rose-400"
-            : "border-border";
-
-  const highlightClass =
-    highlight === "cyan"
-      ? "text-[var(--accent-blue)] font-semibold"
-      : highlight === "amber"
-        ? "text-amber-400 font-semibold"
-        : highlight === "emerald"
-          ? "text-emerald-400 font-semibold"
-          : highlight === "rose"
-            ? "text-rose-400 font-semibold"
-            : "text-foreground font-medium";
+  const tone = highlight || "default";
+  const theme = TONE_MAP[tone];
+  const borderClass = theme.border;
+  const highlightClass = `${theme.text} ${tone === "default" ? "font-medium" : "font-semibold"}`;
 
   return (
     <div className={`border-l-2 ${borderClass} pl-3.5 py-1 space-y-0.5`}>
@@ -85,17 +111,11 @@ export function Meter({
   label: string;
   value: number;
   max?: number;
-  tone?: "cyan" | "amber" | "emerald" | "rose";
+  tone?: Tone;
 }) {
   const pct = Math.max(0, Math.min(100, (value / max) * 100));
-  const barColor =
-    tone === "amber"
-      ? "bg-amber-400"
-      : tone === "emerald"
-        ? "bg-emerald-400"
-        : tone === "rose"
-          ? "bg-rose-500"
-          : "bg-[var(--accent-blue)]";
+  const theme = TONE_MAP[tone || "cyan"];
+  const barColor = theme.bg;
 
   return (
     <div>
@@ -117,27 +137,35 @@ export function Meter({
 
 export function StatusDot({ label }: { label: string }) {
   const upper = label.toUpperCase();
-  let textClass = "text-muted-foreground border-border bg-secondary/60";
-  let dotBg = "bg-muted-foreground";
+  let tone: Tone = "default";
 
   if (
     upper.includes("SPILL_DETECTED") ||
     upper.includes("ALERT") ||
-    upper.includes("DISCONTINUITY")
+    upper.includes("DISCONTINUITY") ||
+    upper.includes("OFFLINE")
   ) {
-    textClass = "text-rose-400 border-rose-500/40 bg-rose-500/10";
-    dotBg = "bg-rose-500";
-  } else if (upper.includes("NO_SPILL") || upper.includes("CLEAN") || upper.includes("VERIFIED")) {
-    textClass = "text-emerald-400 border-emerald-500/40 bg-emerald-500/10";
-    dotBg = "bg-emerald-400";
+    tone = "rose";
+  } else if (
+    upper.includes("NO_SPILL") ||
+    upper.includes("CLEAN") ||
+    upper.includes("VERIFIED") ||
+    upper.includes("ACTIVE")
+  ) {
+    tone = "emerald";
   } else if (
     upper.includes("INCONCLUSIVE") ||
     upper.includes("UNAVAILABLE") ||
     upper.includes("PENDING")
   ) {
-    textClass = "text-amber-400 border-amber-500/40 bg-amber-500/10";
-    dotBg = "bg-amber-400";
+    tone = "amber";
+  } else if (upper.includes("WORKING") || upper.includes("PROCESSING")) {
+    tone = "cyan";
   }
+
+  const theme = TONE_MAP[tone];
+  const textClass = `${tone === "default" ? theme.textMuted : theme.text} ${theme.borderMuted} ${theme.bgMuted}`;
+  const dotBg = theme.bg;
 
   return (
     <span
@@ -152,25 +180,34 @@ export function StatusDot({ label }: { label: string }) {
 export function OutcomeBadge({ outcome }: { outcome?: string | null }) {
   if (!outcome) return null;
   if (outcome === "SPILL_DETECTED") {
+    const theme = TONE_MAP["rose"];
     return (
-      <div className="inline-flex items-center gap-2 rounded-md border border-rose-500/40 bg-rose-500/10 px-2.5 py-1 text-xs font-mono font-semibold text-rose-400">
-        <span className="h-1.5 w-1.5 rounded-full bg-rose-500 om-pulse-dot" />
+      <div
+        className={`inline-flex items-center gap-2 rounded-md border ${theme.borderMuted} ${theme.bgMuted} px-2.5 py-1 text-xs font-mono font-semibold ${theme.text}`}
+      >
+        <span className={`h-1.5 w-1.5 rounded-full ${theme.bg} om-pulse-dot`} />
         OIL-LIKE SIGNATURE DETECTED
       </div>
     );
   }
   if (outcome === "NO_SPILL_DETECTED") {
+    const theme = TONE_MAP["emerald"];
     return (
-      <div className="inline-flex items-center gap-2 rounded-md border border-emerald-500/40 bg-emerald-500/10 px-2.5 py-1 text-xs font-mono font-semibold text-emerald-400">
-        <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
+      <div
+        className={`inline-flex items-center gap-2 rounded-md border ${theme.borderMuted} ${theme.bgMuted} px-2.5 py-1 text-xs font-mono font-semibold ${theme.text}`}
+      >
+        <span className={`h-1.5 w-1.5 rounded-full ${theme.bg}`} />
         NO SPILL DETECTED
       </div>
     );
   }
   if (outcome === "ANALYSIS_INCONCLUSIVE") {
+    const theme = TONE_MAP["amber"];
     return (
-      <div className="inline-flex items-center gap-2 rounded-md border border-amber-500/40 bg-amber-500/10 px-2.5 py-1 text-xs font-mono font-semibold text-amber-300">
-        <span className="h-1.5 w-1.5 rounded-full bg-amber-400" />
+      <div
+        className={`inline-flex items-center gap-2 rounded-md border ${theme.borderMuted} ${theme.bgMuted} px-2.5 py-1 text-xs font-mono font-semibold ${theme.text}`}
+      >
+        <span className={`h-1.5 w-1.5 rounded-full ${theme.bg}`} />
         ANALYSIS INCONCLUSIVE
       </div>
     );
@@ -191,39 +228,41 @@ export function Modal({
   subtitle?: string | undefined;
   children: ReactNode;
 }) {
-  useEffect(() => {
-    if (!open) return;
-    const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [open, onClose]);
-
-  if (!open) return null;
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <div className="om-fade absolute inset-0 bg-background/80" onClick={onClose} />
-      <div
-        role="dialog"
-        aria-modal="true"
-        aria-label={title}
-        className="om-rise relative z-10 w-full max-w-lg rounded-md border border-border bg-card shadow-2xl"
-      >
-        <header className="flex items-start justify-between gap-4 border-b border-border px-5 py-3.5">
-          <div>
-            <h3 className="text-sm font-semibold text-foreground font-mono">{title}</h3>
-            {subtitle && <p className="text-[11px] text-muted-foreground font-mono">{subtitle}</p>}
-          </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="rounded-md border border-border px-2 py-0.5 text-xs text-muted-foreground font-mono transition-colors hover:bg-secondary hover:text-foreground"
-          >
-            Close
-          </button>
-        </header>
-        <div className="max-h-[65vh] overflow-y-auto px-5 py-4 text-sm">{children}</div>
-      </div>
-    </div>
+    <Dialog.Root open={open} onOpenChange={(isOpen) => !isOpen && onClose()}>
+      <Dialog.Portal>
+        <Dialog.Overlay className="fixed inset-0 z-50 bg-background/80 om-fade" />
+        <Dialog.Content
+          className="fixed left-[50%] top-[50%] z-50 w-full max-w-lg translate-x-[-50%] translate-y-[-50%] rounded-md border border-border bg-card shadow-2xl om-rise outline-none"
+          aria-describedby={subtitle ? "modal-subtitle" : undefined}
+        >
+          <header className="flex items-start justify-between gap-4 border-b border-border px-5 py-3.5">
+            <div>
+              <Dialog.Title className="text-sm font-semibold text-foreground font-mono">
+                {title}
+              </Dialog.Title>
+              {subtitle && (
+                <Dialog.Description
+                  id="modal-subtitle"
+                  className="text-[11px] text-muted-foreground font-mono"
+                >
+                  {subtitle}
+                </Dialog.Description>
+              )}
+            </div>
+            <Dialog.Close asChild>
+              <button
+                type="button"
+                className="rounded-md border border-border px-2 py-0.5 text-xs text-muted-foreground font-mono transition-colors hover:bg-secondary hover:text-foreground outline-none"
+              >
+                Close
+              </button>
+            </Dialog.Close>
+          </header>
+          <div className="max-h-[65vh] overflow-y-auto px-5 py-4 text-sm">{children}</div>
+        </Dialog.Content>
+      </Dialog.Portal>
+    </Dialog.Root>
   );
 }
 
@@ -234,6 +273,73 @@ export function KeyVal({ k, v }: { k: string; v: ReactNode }) {
         {k}
       </span>
       <span className="tabular-nums text-foreground font-mono text-xs">{v}</span>
+    </div>
+  );
+}
+
+export function ReportSkeleton() {
+  return (
+    <div className="space-y-6 max-w-4xl mx-auto py-8 animate-pulse">
+      <div className="h-8 w-1/3 bg-secondary rounded mb-2" />
+      <div className="h-4 w-1/2 bg-secondary rounded mb-8" />
+      <div className="h-64 rounded-md border border-border bg-card/50" />
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="h-32 rounded-md border border-border bg-card/50" />
+        <div className="h-32 rounded-md border border-border bg-card/50" />
+      </div>
+    </div>
+  );
+}
+
+export function Stepper({
+  steps,
+}: {
+  steps: { label: string; ok: boolean | null; description?: string }[];
+}) {
+  return (
+    <div className="flex flex-col gap-3 font-mono text-xs">
+      {steps.map((step, i, arr) => {
+        const isLast = i === arr.length - 1;
+        const icon =
+          step.ok === true ? (
+            <CheckCircle2 className="h-4 w-4 text-emerald-400 z-10 bg-card rounded-full" />
+          ) : step.ok === false ? (
+            <HelpCircle className="h-4 w-4 text-amber-400 z-10 bg-card rounded-full" />
+          ) : (
+            <Circle className="h-4 w-4 text-muted-foreground/40 z-10 bg-card rounded-full" />
+          );
+
+        return (
+          <div key={step.label} className="relative flex items-start gap-3">
+            {!isLast && (
+              <div
+                className={`absolute left-2 top-4 bottom-[-12px] w-px ${
+                  step.ok === true ? "bg-emerald-500/40" : "bg-border"
+                }`}
+              />
+            )}
+            <div className="mt-0.5">{icon}</div>
+            <div>
+              <div
+                className={`font-semibold ${
+                  step.ok === true
+                    ? "text-foreground"
+                    : step.ok === false
+                      ? "text-amber-300"
+                      : "text-muted-foreground"
+                }`}
+              >
+                {step.label}
+              </div>
+              {step.description && (
+                <div className="mt-0.5 text-[11px] text-muted-foreground max-w-sm">
+                  {step.description}
+                </div>
+              )}
+            </div>
+          </div>
+        );
+      })}
     </div>
   );
 }

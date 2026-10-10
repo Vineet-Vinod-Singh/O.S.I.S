@@ -56,437 +56,558 @@ function LandingPage() {
         /* full-bleed — override the root layout padding */
         margin: "0 -20px",
         width: "calc(100% + 40px)",
+        position: "relative",
+        zIndex: 0,
       }}
     >
-      {/* ════════════════════════════════════════════════════════════
-          CINEMATIC MARITIME BACKGROUND OVERLAY
-         ════════════════════════════════════════════════════════════ */}
-      <div
-        aria-hidden="true"
-        style={{
-          position: 'fixed',
-          inset: 0,
-          zIndex: -1,
-          pointerEvents: 'none',
-          overflow: 'hidden',
-          backgroundColor: '#02070E',
-        }}
-      >
-        {/* Layer 1: Cinematic Ocean & Distant Tanker Environment Image */}
+      {/* Fixed Background Image for Parallax */}
+      <div style={{ position: "fixed", top: 0, left: 0, width: "100%", height: "100vh", zIndex: -1, backgroundColor: "#000" }}>
         <img
-          src="/images/ocean-tanker-bg.jpg"
-          alt=""
-          aria-hidden="true"
-          className="landing-bg-img"
-          style={{
-            position: 'absolute',
-            inset: 0,
-            width: '100%',
-            height: '100%',
-            objectFit: 'cover',
-            objectPosition: '52% 24%',
-            filter: 'contrast(1.08) brightness(0.96) saturate(1.06)',
-          }}
-        />
-
-        {/* Layer 2: Deep Blue Atmospheric Maritime Color Grading */}
-        <div
-          style={{
-            position: 'absolute',
-            inset: 0,
-            background:
-              'linear-gradient(180deg, rgba(3, 14, 24, 0.22) 0%, rgba(2, 9, 18, 0.12) 42%, rgba(2, 8, 15, 0.52) 100%)',
-            mixBlendMode: 'multiply',
-          }}
-        />
-
-        {/* Layer 3: Ambient Oceanic Depth Tint */}
-        <div
-          style={{
-            position: 'absolute',
-            inset: 0,
-            background:
-              'radial-gradient(ellipse 110% 85% at 55% 25%, rgba(6, 36, 58, 0.15) 0%, rgba(3, 17, 28, 0.32) 55%, rgba(2, 7, 14, 0.65) 100%)',
-          }}
-        />
-
-        {/* Layer 4: Left-Side Dark Gradient for Hero Typography Readability (Ocean visible beneath) */}
-        <div
-          style={{
-            position: 'absolute',
-            inset: 0,
-            background:
-              'linear-gradient(90deg, rgba(3, 8, 15, 0.76) 0%, rgba(3, 8, 15, 0.58) 35%, rgba(3, 8, 15, 0.2) 60%, transparent 80%)',
-          }}
-        />
-
-        {/* Layer 5: SAR Visualization Panel Integration Darkening */}
-        <div
-          style={{
-            position: 'absolute',
-            inset: 0,
-            background:
-              'radial-gradient(ellipse 70% 55% at 78% 46%, rgba(3, 14, 24, 0.28) 0%, transparent 75%)',
-          }}
-        />
-
-        {/* Layer 6: Subtle Secondary SVG Bathymetric / Current Overlays (Framing Flanks) */}
-        <svg
-          className="landing-currents-svg"
-          viewBox="0 0 3200 1100"
-          fill="none"
-          xmlns="http://www.w3.org/2000/svg"
-          preserveAspectRatio="none"
-          style={{
-            position: 'absolute',
-            top: 0,
-            left: 0,
-            width: '200%',
-            height: '100%',
-            opacity: 0.55,
-            maskImage:
-              'radial-gradient(ellipse 65% 65% at 50% 42%, transparent 20%, rgba(0,0,0,0.45) 55%, black 100%)',
-            WebkitMaskImage:
-              'radial-gradient(ellipse 65% 65% at 50% 42%, transparent 20%, rgba(0,0,0,0.45) 55%, black 100%)',
-          }}
-        >
-          <defs>
-            {/* Faint cyan current highlight gradient */}
-            <linearGradient id="osis-cyan-current-1" x1="0%" y1="0%" x2="100%" y2="0%">
-              <stop offset="0%" stopColor="#19B5E6" stopOpacity="0.04" />
-              <stop offset="28%" stopColor="#19B5E6" stopOpacity="0.13" />
-              <stop offset="65%" stopColor="#19B5E6" stopOpacity="0.06" />
-              <stop offset="100%" stopColor="#19B5E6" stopOpacity="0.04" />
-            </linearGradient>
-
-            {/* Secondary cyan/teal current filament */}
-            <linearGradient id="osis-cyan-current-2" x1="0%" y1="0%" x2="100%" y2="0%">
-              <stop offset="0%" stopColor="#19B5E6" stopOpacity="0.03" />
-              <stop offset="45%" stopColor="#19B5E6" stopOpacity="0.11" />
-              <stop offset="78%" stopColor="#2ECF8B" stopOpacity="0.07" />
-              <stop offset="100%" stopColor="#19B5E6" stopOpacity="0.03" />
-            </linearGradient>
-
-            {/* Bathymetric contour gradient */}
-            <linearGradient id="osis-contour-grad" x1="0%" y1="0%" x2="100%" y2="0%">
-              <stop offset="0%" stopColor="#173B56" stopOpacity="0.18" />
-              <stop offset="50%" stopColor="#225479" stopOpacity="0.32" />
-              <stop offset="100%" stopColor="#173B56" stopOpacity="0.18" />
-            </linearGradient>
-
-            {/* Seamless 1600px ocean current unit */}
-            <g id="ocean-currents-tile">
-              {/* Path 1: Upper Horizon Marine Swell — broad, gentle */}
-              <path
-                d="M0,65 C140,53 320,85 520,70 C720,55 940,95 1160,80 C1340,65 1460,77 1600,65"
-                stroke="rgba(24,56,80,0.3)"
-                strokeWidth="0.75"
-              />
-
-              {/* Path 2: Secondary Upper Current */}
-              <path
-                d="M0,140 C160,160 380,110 600,125 C820,140 1060,185 1280,165 C1420,150 1440,120 1600,140"
-                stroke="rgba(20,50,74,0.25)"
-                strokeWidth="0.9"
-              />
-
-              {/* Path 3: Sub-surface Bathymetric Contour */}
-              <path
-                d="M0,225 C150,200 360,255 580,240 C800,225 1040,180 1260,205 C1410,220 1450,250 1600,225"
-                stroke="url(#osis-contour-grad)"
-                strokeWidth="0.8"
-              />
-
-              {/* Path 4: Open Ocean Meander */}
-              <path
-                d="M0,310 C170,340 390,280 620,300 C850,320 1080,365 1300,340 C1430,325 1430,280 1600,310"
-                stroke="rgba(28,66,94,0.32)"
-                strokeWidth="1.1"
-              />
-
-              {/* Path 5: Primary Current Jet — with faint Cyan luminescence */}
-              <path
-                d="M0,395 C180,373 400,430 630,410 C860,390 1100,455 1320,430 C1440,415 1420,417 1600,395"
-                stroke="url(#osis-cyan-current-1)"
-                strokeWidth="1.4"
-              />
-
-              {/* Path 6: Companion Current Filament (faint cyan) */}
-              <path
-                d="M0,425 C170,405 390,460 620,440 C850,420 1090,485 1310,460 C1430,445 1430,445 1600,425"
-                stroke="rgba(25,181,230,0.06)"
-                strokeWidth="0.8"
-              />
-
-              {/* Path 7: Deep Pelagic Contour */}
-              <path
-                d="M0,515 C160,543 380,480 600,500 C820,520 1060,570 1280,545 C1420,530 1440,487 1600,515"
-                stroke="rgba(22,58,84,0.28)"
-                strokeWidth="1.0"
-              />
-
-              {/* Path 8: Sub-Surface Hydrodynamic Jet (faint cyan/emerald) */}
-              <path
-                d="M0,610 C190,578 410,650 640,625 C870,600 1110,675 1330,645 C1440,630 1410,642 1600,610"
-                stroke="url(#osis-cyan-current-2)"
-                strokeWidth="1.3"
-              />
-
-              {/* Path 9: Tactical Drift Vector Stream (dashed) */}
-              <path
-                d="M0,635 C180,607 400,675 630,650 C860,625 1100,700 1320,670 C1440,655 1420,663 1600,635"
-                stroke="rgba(25,181,230,0.08)"
-                strokeWidth="0.85"
-                strokeDasharray="8 10"
-              />
-
-              {/* Path 10: Mid-Abyssal Shelf Line */}
-              <path
-                d="M0,725 C150,749 370,695 590,715 C810,735 1050,780 1270,755 C1410,740 1450,701 1600,725"
-                stroke="url(#osis-contour-grad)"
-                strokeWidth="1.0"
-              />
-
-              {/* Path 11: Deep Under-Trench Stream (faint cyan highlight) */}
-              <path
-                d="M0,820 C175,794 395,860 625,835 C855,810 1095,880 1315,850 C1435,835 1425,846 1600,820"
-                stroke="rgba(25,181,230,0.07)"
-                strokeWidth="1.1"
-              />
-
-              {/* Path 12: Lower Bathymetric Step */}
-              <path
-                d="M0,915 C160,935 380,885 600,905 C820,925 1060,970 1280,945 C1420,930 1440,895 1600,915"
-                stroke="rgba(18,48,70,0.22)"
-                strokeWidth="0.8"
-              />
-
-              {/* Path 13: Abyssal Floor Boundary */}
-              <path
-                d="M0,1005 C180,987 400,1040 630,1020 C860,1000 1100,1060 1320,1035 C1440,1020 1420,1023 1600,1005"
-                stroke="rgba(15,40,60,0.18)"
-                strokeWidth="0.7"
-              />
-
-              {/* Organic Ocean Gyre Swirls & Regional Boundary Currents (Negative space / Right-side) */}
-              <path
-                d="M 860,160 C 1040,110 1260,150 1420,250 C 1530,320 1580,440 1510,530 C 1430,620 1290,640 1180,590 C 1080,540 1060,430 1140,360 C 1210,300 1330,310 1400,370"
-                stroke="rgba(25,181,230,0.05)"
-                strokeWidth="0.9"
-              />
-              <path
-                d="M 940,710 C 1080,660 1260,690 1390,770 C 1490,835 1530,925 1460,990"
-                stroke="rgba(25,181,230,0.055)"
-                strokeWidth="0.85"
-                strokeDasharray="6 8"
-              />
-              <path
-                d="M 520,35 C 700,95 940,65 1170,135 C 1370,195 1510,155 1600,185"
-                stroke="rgba(24,60,88,0.22)"
-                strokeWidth="0.75"
-              />
-            </g>
-          </defs>
-
-          {/* First tile (0 to 1600) */}
-          <use href="#ocean-currents-tile" x="0" y="0" />
-          {/* Second tile (1600 to 3200) — guaranteed seamless loop */}
-          <use href="#ocean-currents-tile" x="1600" y="0" />
-        </svg>
-
-        {/* Layer 7: Atmospheric perimeter vignette & bottom section grounding */}
-        <div
-          style={{
-            position: 'absolute',
-            inset: 0,
-            background:
-              'radial-gradient(ellipse 95% 85% at 50% 50%, transparent 55%, rgba(2, 6, 12, 0.35) 80%, rgba(1, 4, 8, 0.78) 100%), ' +
-              'linear-gradient(180deg, transparent 65%, rgba(7, 11, 16, 0.45) 85%, rgba(7, 11, 16, 0.95) 100%)',
-          }}
+          src="/images/landing/hero-sunset-ship.jpg?v=2"
+          alt="Ocean background"
+          style={{ width: "100%", height: "100%", objectFit: "cover", objectPosition: "center", filter: "brightness(0.55)" }}
+          fetchPriority="high"
         />
       </div>
-
       {/* ════════════════════════════════════════════════════════════
-          HERO SECTION
+          NEW HERO (STORYTELLING DESIGN #5)
          ════════════════════════════════════════════════════════════ */}
       <section
         style={{
-          minHeight: "min(92vh, 860px)",
-          display: "flex",
-          alignItems: "center",
+          minHeight: "max(100vh, 760px)",
           position: "relative",
+          zIndex: 1,
           overflow: "hidden",
+          display: "flex",
+          flexDirection: "column",
+          fontFamily: "Inter, system-ui, sans-serif",
         }}
       >
-        {/* Subtle radial vignette */}
+
+        {/* Overlays */}
+        {/* 0) Top gradient for header readability */}
         <div
-          aria-hidden="true"
+          style={{
+            position: "absolute",
+            top: 0,
+            left: 0,
+            right: 0,
+            height: "150px",
+            zIndex: -1,
+            pointerEvents: "none",
+            background: "linear-gradient(to bottom, rgba(3,8,15,0.7) 0%, transparent 100%)",
+          }}
+        />
+        {/* 1) Left-to-right dark gradient for text readability */}
+        <div
           style={{
             position: "absolute",
             inset: 0,
-            background:
-              "radial-gradient(ellipse 70% 60% at 70% 45%, rgba(25,181,230,0.04) 0%, transparent 70%)",
+            zIndex: -1,
             pointerEvents: "none",
+            background:
+              "linear-gradient(90deg, rgba(3,8,15,0.8) 0%, transparent 65%)",
           }}
         />
+        {/* 2) Bottom gradient into --background behind the cards (REMOVED per user request) */}
 
+        {/* Text Column Container */}
         <div
           style={{
-            maxWidth: 1200,
+            flex: 1,
+            display: "flex",
+            alignItems: "center",
+            maxWidth: "1240px",
             width: "100%",
             margin: "0 auto",
-            padding: "80px 32px 64px",
-            display: "grid",
-            gridTemplateColumns: "1fr 1fr",
-            gap: 64,
-            alignItems: "center",
+            padding: "0 48px",
+            paddingTop: "96px", // clear the header
+            paddingBottom: "64px",
+            zIndex: 1,
           }}
-          className="landing-hero-grid"
+          className="landing-text-col"
         >
-          {/* ── Left column: Text + CTAs ── */}
-          <div style={{ maxWidth: 560 }}>
-            {/* Eyebrow */}
+          <div style={{ maxWidth: "550px", width: "100%" }}>
+            {/* Eyebrow Pill */}
             <div
-              className="font-mono"
               style={{
-                fontSize: 11,
-                letterSpacing: "0.16em",
-                color: "var(--primary)",
-                marginBottom: 28,
-                textTransform: "uppercase",
+                display: "inline-flex",
+                alignItems: "center",
+                gap: "8px",
+                border: "1px solid rgba(25,181,230,.35)",
+                background: "rgba(255,255,255,.04)",
+                borderRadius: "999px",
+                padding: "6px 14px",
+                marginBottom: "32px",
               }}
             >
-              Maritime Intelligence · Oil Spill Response
+              <svg
+                width="12"
+                height="12"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="var(--primary)"
+                strokeWidth="2.5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+              </svg>
+              <span
+                style={{
+                  fontSize: "11px",
+                  textTransform: "uppercase",
+                  letterSpacing: "0.14em",
+                  color: "white",
+                  fontWeight: 600,
+                  textShadow: "0 2px 4px rgba(0,0,0,0.6)",
+                }}
+              >
+                Oil Spill Identification & Source Attribution System
+              </span>
             </div>
 
-            {/* Headline */}
+            {/* H1 */}
             <h1
-              className="font-mono"
               style={{
-                fontSize: "clamp(2.2rem, 5vw, 3.6rem)",
+                fontSize: "clamp(2.4rem, 5vw, 4rem)",
                 fontWeight: 800,
-                lineHeight: 1.08,
-                color: "var(--foreground)",
-                letterSpacing: "-0.02em",
+                lineHeight: 1.1,
                 margin: 0,
+                color: "white",
+                letterSpacing: "-0.02em",
               }}
             >
-              DETECT.
+              Intelligence Today
               <br />
-              TRACE.
+              for <span style={{ color: "var(--primary)" }}>Cleaner Oceans</span>
               <br />
-              ATTRIBUTE.
+              <span style={{ color: "var(--primary)" }}>Tomorrow</span>
             </h1>
 
-            {/* Sub-copy */}
-            <p
-              style={{
-                fontSize: 15,
-                lineHeight: 1.7,
-                color: "var(--muted-foreground)",
-                marginTop: 28,
-                maxWidth: 480,
-              }}
-            >
-              Satellite SAR, ocean-drift modelling and AIS vessel intelligence
-              unified for oil-spill investigation.
-            </p>
-
-            {/* CTA row */}
+            {/* Subline */}
             <div
-              style={{
-                display: "flex",
-                gap: 14,
-                marginTop: 40,
-                flexWrap: "wrap",
-              }}
+              style={{ fontSize: "18px", fontWeight: "bold", color: "white", marginTop: "24px" }}
             >
-              <Link
-                to="/overview"
-                className="font-mono"
-                style={{
-                  display: "inline-flex",
-                  alignItems: "center",
-                  gap: 10,
-                  background: "var(--primary)",
-                  color: "var(--primary-foreground)",
-                  padding: "13px 28px",
-                  borderRadius: 6,
-                  fontSize: 12,
-                  fontWeight: 700,
-                  letterSpacing: "0.08em",
-                  textDecoration: "none",
-                  transition: "opacity 0.15s",
-                  border: "none",
-                }}
-                id="cta-explore"
-              >
-                EXPLORE O.S.I.S.
-                <ArrowRight style={{ width: 15, height: 15 }} />
-              </Link>
-
-              <a
-                href="#how-it-works"
-                className="font-mono"
-                style={{
-                  display: "inline-flex",
-                  alignItems: "center",
-                  gap: 8,
-                  background: "transparent",
-                  color: "var(--foreground)",
-                  padding: "13px 28px",
-                  borderRadius: 6,
-                  fontSize: 12,
-                  fontWeight: 600,
-                  letterSpacing: "0.08em",
-                  textDecoration: "none",
-                  border: "1px solid var(--border)",
-                  transition: "border-color 0.15s, color 0.15s",
-                }}
-                id="cta-how"
-              >
-                HOW IT WORKS
-              </a>
+              Detect. Predict. Attribute. Act.
             </div>
 
-            {/* Badge row */}
-            <div
-              className="font-mono"
+            {/* Body */}
+            <p
               style={{
-                display: "flex",
-                gap: 20,
-                marginTop: 48,
-                fontSize: 10,
-                letterSpacing: "0.1em",
-                color: "var(--muted-foreground)",
-                textTransform: "uppercase",
+                fontSize: "15px",
+                color: "white",
+                opacity: 0.75,
+                maxWidth: "440px",
+                marginTop: "12px",
+                lineHeight: 1.6,
+                marginBottom: 0,
               }}
             >
-              <span>SIH PS26143</span>
-              <span style={{ opacity: 0.3 }}>·</span>
-              <span>Sentinel-1 SAR</span>
-              <span style={{ opacity: 0.3 }}>·</span>
-              <span>INCOIS HyCOM</span>
+              Supporting governments, researchers and maritime operators with advanced oil-spill
+              intelligence.
+            </p>
+
+            {/* Button Row */}
+            <div style={{ display: "flex", gap: "14px", marginTop: "32px", flexWrap: "wrap" }}>
+              <Link
+                to="/analysis"
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: "8px",
+                  background: "var(--primary)",
+                  color: "#020810",
+                  height: "44px",
+                  padding: "0 24px",
+                  borderRadius: "6px",
+                  fontWeight: 600,
+                  fontSize: "14px",
+                  textDecoration: "none",
+                  transition: "opacity 0.15s",
+                }}
+                className="hover:opacity-90"
+              >
+                Launch Investigation
+                <ArrowRight style={{ width: "16px", height: "16px" }} />
+              </Link>
+              <Link
+                to="/overview"
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: "8px",
+                  background: "transparent",
+                  border: "1px solid rgba(255,255,255,0.55)",
+                  color: "white",
+                  height: "44px",
+                  padding: "0 24px",
+                  borderRadius: "6px",
+                  fontWeight: 600,
+                  fontSize: "14px",
+                  textDecoration: "none",
+                  transition: "background 0.15s",
+                }}
+                className="hover:bg-white/10"
+              >
+                Watch Demo
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 14.5v-9l6 4.5-6 4.5z" />
+                </svg>
+              </Link>
+            </div>
+          </div>
+        </div>
+
+        {/* Feature Cards (Bottom of hero) */}
+        <div
+          style={{
+            width: "100%",
+            paddingBottom: "32px",
+            marginTop: "auto",
+            zIndex: 1,
+          }}
+        >
+          <div
+            className="landing-cards-grid"
+            style={{
+              maxWidth: "1240px",
+              margin: "0 auto",
+              padding: "0 48px",
+              display: "grid",
+              gridTemplateColumns: "repeat(4, 1fr)",
+              gap: "16px",
+            }}
+          >
+            {/* Card 1: Satellite */}
+            <Link
+              to="/satellite"
+              className="landing-feature-card group"
+              aria-label="Satellite Detection"
+            >
+              <div style={{ aspectRatio: "16/9", overflow: "hidden" }}>
+                <img
+                  src="/images/landing/card-satellite.jpg"
+                  alt=""
+                  loading="lazy"
+                  width="300"
+                  height="168"
+                  style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                  className="transition-transform duration-500 group-hover:scale-105"
+                />
+              </div>
+              <div
+                style={{
+                  padding: "12px 14px",
+                  color: "white",
+                  fontSize: "13px",
+                  fontWeight: 500,
+                  fontFamily: "Inter, system-ui, sans-serif",
+                }}
+              >
+                Satellite Detection
+              </div>
+            </Link>
+
+            {/* Card 2: Drift */}
+            <Link
+              to="/backtracking"
+              className="landing-feature-card group"
+              aria-label="Drift Modeling"
+            >
+              <div style={{ aspectRatio: "16/9", overflow: "hidden" }}>
+                <img
+                  src="/images/landing/card-drift.jpg"
+                  alt=""
+                  loading="lazy"
+                  width="300"
+                  height="168"
+                  style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                  className="transition-transform duration-500 group-hover:scale-105"
+                />
+              </div>
+              <div
+                style={{
+                  padding: "12px 14px",
+                  color: "white",
+                  fontSize: "13px",
+                  fontWeight: 500,
+                  fontFamily: "Inter, system-ui, sans-serif",
+                }}
+              >
+                Drift Modeling
+              </div>
+            </Link>
+
+            {/* Card 3: AIS */}
+            <Link to="/ais" className="landing-feature-card group" aria-label="AIS Analysis">
+              <div style={{ aspectRatio: "16/9", overflow: "hidden" }}>
+                <img
+                  src="/images/landing/card-ais.jpg"
+                  alt=""
+                  loading="lazy"
+                  width="300"
+                  height="168"
+                  style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                  className="transition-transform duration-500 group-hover:scale-105"
+                />
+              </div>
+              <div
+                style={{
+                  padding: "12px 14px",
+                  color: "white",
+                  fontSize: "13px",
+                  fontWeight: 500,
+                  fontFamily: "Inter, system-ui, sans-serif",
+                }}
+              >
+                AIS Analysis
+              </div>
+            </Link>
+
+            {/* Card 4: Attribution */}
+            <Link to="/ais" className="landing-feature-card group" aria-label="Vessel Attribution">
+              <div style={{ aspectRatio: "16/9", overflow: "hidden" }}>
+                <img
+                  src="/images/landing/card-attribution.png"
+                  alt=""
+                  loading="lazy"
+                  width="300"
+                  height="168"
+                  style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                  className="transition-transform duration-500 group-hover:scale-105"
+                />
+              </div>
+              <div
+                style={{
+                  padding: "12px 14px",
+                  color: "white",
+                  fontSize: "13px",
+                  fontWeight: 500,
+                  fontFamily: "Inter, system-ui, sans-serif",
+                }}
+              >
+                Vessel Attribution
+              </div>
+            </Link>
+          </div>
+        </div>
+      </section>
+
+      {/* ════════════════════════════════════════════════════════════
+          HOW IT WORKS — Four-Step Pipeline
+         ════════════════════════════════════════════════════════════ */}
+      <section
+        id="how-it-works"
+        style={{
+          padding: "100px 32px",
+          background: "linear-gradient(165deg, rgba(7,11,16,0.7) 0%, rgba(13,20,28,0.4) 50%, rgba(7,11,16,0.7) 100%)",
+          position: "relative",
+          overflow: "hidden",
+          zIndex: 2,
+        }}
+      >
+        {/* Ambient background glow (Top Right - Cyan) */}
+        <div
+          style={{
+            position: "absolute",
+            top: 0,
+            right: 0,
+            transform: "translate(20%, -20%)",
+            width: "800px",
+            height: "800px",
+            background: "radial-gradient(circle, rgba(25,181,230,0.08) 0%, transparent 70%)",
+            pointerEvents: "none",
+            zIndex: 0,
+          }}
+        />
+        {/* Ambient background glow (Bottom Left - Amber) */}
+        <div
+          style={{
+            position: "absolute",
+            bottom: 0,
+            left: 0,
+            transform: "translate(-20%, 20%)",
+            width: "900px",
+            height: "900px",
+            background: "radial-gradient(circle, rgba(245,158,11,0.04) 0%, transparent 60%)",
+            pointerEvents: "none",
+            zIndex: 0,
+          }}
+        />
+        <div
+          style={{
+            maxWidth: 1240,
+            margin: "0 auto",
+            display: "grid",
+            gap: 64,
+            alignItems: "center",
+            position: "relative",
+            zIndex: 1,
+          }}
+          className="landing-how-grid"
+        >
+          {/* Text and Pipeline */}
+          <div>
+            <div style={{ marginBottom: 48 }}>
+              <div
+                className="font-mono"
+                style={{
+                  fontSize: 11,
+                  letterSpacing: "0.16em",
+                  color: "var(--primary)",
+                  marginBottom: 16,
+                  textTransform: "uppercase",
+                  textShadow: "0 2px 4px rgba(0,0,0,0.8)",
+                }}
+              >
+                How It Works
+              </div>
+              <h2
+                style={{
+                  fontSize: "clamp(2rem, 3.5vw, 2.8rem)",
+                  fontWeight: 800,
+                  lineHeight: 1.15,
+                  margin: 0,
+                  fontFamily: "Inter, system-ui, sans-serif",
+                  background: "linear-gradient(90deg, #ffffff 0%, rgba(255,255,255,0.6) 100%)",
+                  WebkitBackgroundClip: "text",
+                  WebkitTextFillColor: "transparent",
+                  letterSpacing: "-0.01em",
+                  filter: "drop-shadow(0 4px 12px rgba(0,0,0,0.8))",
+                }}
+              >
+                From Detection to Actionable Insight
+              </h2>
+              <p
+                style={{
+                  fontSize: 15,
+                  lineHeight: 1.7,
+                  color: "var(--muted-foreground)",
+                  marginTop: 16,
+                  maxWidth: 480,
+                  fontFamily: "Inter, system-ui, sans-serif",
+                  textShadow: "0 2px 4px rgba(0,0,0,0.8)",
+                }}
+              >
+                An end-to-end intelligence pipeline that correlates SAR anomaly detections with
+                oceanographic drift models and AIS vessel tracks.
+              </p>
+            </div>
+
+            {/* Vertical connected pipeline */}
+            <div style={{ position: "relative", paddingLeft: 16 }}>
+              {/* Vertical connecting line */}
+              <div
+                style={{
+                  position: "absolute",
+                  left: 31,
+                  top: 24,
+                  bottom: 24,
+                  width: 2,
+                  background:
+                    "linear-gradient(to bottom, var(--primary) 0%, var(--accent-emerald) 50%, var(--accent-amber) 100%)",
+                  opacity: 0.3,
+                  zIndex: 0,
+                }}
+              />
+
+              <div
+                style={{
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: 32,
+                  position: "relative",
+                  zIndex: 1,
+                }}
+              >
+                {PIPELINE.map((step, idx) => {
+                  const Icon = step.icon;
+                  return (
+                    <div key={idx} className="group" style={{ display: "flex", gap: 24, alignItems: "flex-start", cursor: "default" }}>
+                      <div
+                        className="transition-all duration-300 group-hover:scale-110 group-hover:shadow-[0_0_15px_rgba(25,181,230,0.2)]"
+                        style={{
+                          width: 32,
+                          height: 32,
+                          borderRadius: "50%",
+                          background: `color-mix(in srgb, ${step.accent} 15%, var(--background))`,
+                          border: `1px solid color-mix(in srgb, ${step.accent} 40%, transparent)`,
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          flexShrink: 0,
+                        }}
+                      >
+                        <Icon style={{ width: 16, height: 16, color: step.accent }} />
+                      </div>
+                      <div style={{ paddingTop: 4 }} className="transition-all duration-300 group-hover:translate-x-1">
+                        <h3
+                          className="font-mono transition-colors duration-300"
+                          style={{
+                            fontSize: 13,
+                            fontWeight: 700,
+                            color: "white",
+                            letterSpacing: "0.06em",
+                            marginBottom: 8,
+                            textTransform: "uppercase",
+                            textShadow: "0 2px 4px rgba(0,0,0,0.8)",
+                          }}
+                        >
+                          {step.title}
+                        </h3>
+                        <p
+                          style={{
+                            fontSize: 14,
+                            lineHeight: 1.6,
+                            color: "var(--muted-foreground)",
+                            margin: 0,
+                            fontFamily: "Inter, system-ui, sans-serif",
+                            maxWidth: 400,
+                            textShadow: "0 2px 4px rgba(0,0,0,0.8)",
+                          }}
+                        >
+                          {step.desc}
+                        </p>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
             </div>
           </div>
 
-          {/* ── Right column: O.S.I.S. Intelligence Visualization ── */}
-          <div
-            style={{
-              position: "relative",
-              width: "100%",
-              aspectRatio: "1 / 0.9",
-              borderRadius: 10,
-              border: "1px solid rgba(25, 181, 230, 0.2)",
-              background: "rgba(9, 15, 23, 0.72)",
-              backdropFilter: "blur(14px)",
-              WebkitBackdropFilter: "blur(14px)",
-              boxShadow: "0 12px 40px -10px rgba(0, 0, 0, 0.7), inset 0 1px 0 rgba(25, 181, 230, 0.15)",
-              overflow: "hidden",
-            }}
-            className="landing-hero-visual"
-          >
-            {/* Ocean grid background */}
+          {/* Right column: SVG Illustration */}
+          <div className="relative group perspective-1000">
+            {/* Ambient glow behind card */}
+            <div 
+              style={{
+                position: "absolute",
+                inset: -20,
+                background: "linear-gradient(45deg, rgba(25,181,230,0.1), rgba(245,158,11,0.05))",
+                filter: "blur(30px)",
+                opacity: 0,
+                transition: "opacity 0.7s",
+                zIndex: -1,
+              }}
+              className="group-hover:opacity-100"
+            />
+            <div
+              style={{
+                position: "relative",
+                width: "100%",
+                aspectRatio: "1 / 0.9",
+                borderRadius: 16,
+                border: "1px solid rgba(255, 255, 255, 0.08)",
+                background: "linear-gradient(135deg, rgba(10, 16, 25, 0.9) 0%, rgba(5, 8, 12, 0.95) 100%)",
+                boxShadow: "0 20px 40px -10px rgba(0, 0, 0, 0.8), inset 0 1px 0 rgba(255,255,255,0.08)",
+                overflow: "hidden",
+                backdropFilter: "blur(20px)",
+                transform: "translateZ(0)",
+              }}
+              className="transition-transform duration-700 group-hover:scale-[1.01]"
+            >
+              {/* Ocean grid background */}
             <div
               aria-hidden="true"
               style={{
@@ -514,13 +635,13 @@ function LandingPage() {
               <defs>
                 {/* Spill fill gradient */}
                 <radialGradient id="spillGrad" cx="0.5" cy="0.5" r="0.5">
-                  <stop offset="0%" stopColor="#FF4D6D" stopOpacity="0.3" />
-                  <stop offset="100%" stopColor="#FF4D6D" stopOpacity="0.06" />
+                  <stop offset="0%" stopColor="var(--destructive)" stopOpacity="0.3" />
+                  <stop offset="100%" stopColor="var(--destructive)" stopOpacity="0.06" />
                 </radialGradient>
                 {/* Origin uncertainty */}
                 <radialGradient id="originGrad" cx="0.5" cy="0.5" r="0.5">
-                  <stop offset="0%" stopColor="#F5B82E" stopOpacity="0.15" />
-                  <stop offset="100%" stopColor="#F5B82E" stopOpacity="0" />
+                  <stop offset="0%" stopColor="var(--accent-amber)" stopOpacity="0.15" />
+                  <stop offset="100%" stopColor="var(--accent-amber)" stopOpacity="0" />
                 </radialGradient>
                 {/* Pulse animation for spill */}
                 <filter id="spillGlow">
@@ -546,159 +667,270 @@ function LandingPage() {
               />
 
               {/* ── Lat/Lon reference lines ── */}
-              <line x1="0" y1="200" x2="500" y2="200" stroke="#1D2A36" strokeWidth="0.5" strokeDasharray="4 8" opacity="0.4" />
-              <line x1="250" y1="0" x2="250" y2="450" stroke="#1D2A36" strokeWidth="0.5" strokeDasharray="4 8" opacity="0.4" />
+              <line
+                x1="0"
+                y1="200"
+                x2="500"
+                y2="200"
+                stroke="#1D2A36"
+                strokeWidth="0.5"
+                strokeDasharray="4 8"
+                opacity="0.4"
+              />
+              <line
+                x1="250"
+                y1="0"
+                x2="250"
+                y2="450"
+                stroke="#1D2A36"
+                strokeWidth="0.5"
+                strokeDasharray="4 8"
+                opacity="0.4"
+              />
 
-              {/* ════════════════════════════════════════
-                  LAYER 1: VESSEL TRAJECTORIES (background)
-                 ════════════════════════════════════════ */}
-
-              {/* Vessel 1 trajectory: NW heading */}
+              {/* LAYER 1: VESSEL TRAJECTORIES */}
               <polyline
                 points="125,148 140,155 158,160 175,162 188,158"
                 fill="none"
-                stroke="#19B5E6"
+                stroke="var(--primary)"
                 strokeWidth="0.8"
                 strokeDasharray="3 4"
                 opacity="0.25"
               />
-              {/* Vessel 2 trajectory: ENE heading past spill */}
               <polyline
                 points="80,235 110,228 145,220 180,215 210,218 240,225"
                 fill="none"
-                stroke="#19B5E6"
+                stroke="var(--primary)"
                 strokeWidth="0.8"
                 strokeDasharray="3 4"
                 opacity="0.25"
               />
-              {/* Vessel 3 trajectory: SE heading */}
               <polyline
                 points="220,160 230,175 235,195 232,210"
                 fill="none"
-                stroke="#19B5E6"
+                stroke="var(--primary)"
                 strokeWidth="0.8"
                 strokeDasharray="3 4"
                 opacity="0.2"
               />
 
-              {/* ════════════════════════════════════════
-                  LAYER 2: DRIFT TRAJECTORY (origin → spill)
-                 ════════════════════════════════════════ */}
-
-              {/* Backward drift path — curved, dashed */}
+              {/* LAYER 2: DRIFT TRAJECTORY */}
               <path
                 d="M 195,210 Q 220,240 240,265 Q 265,295 280,320 Q 290,340 305,355"
                 fill="none"
-                stroke="#F5B82E"
+                stroke="var(--accent-amber)"
                 strokeWidth="1.8"
                 strokeDasharray="6 5"
                 opacity="0.7"
                 className="landing-drift-path"
               />
-              {/* Drift direction arrows along path */}
-              <polygon points="260,282 265,275 270,283" fill="#F5B82E" opacity="0.45" />
-              <polygon points="290,335 294,327 299,336" fill="#F5B82E" opacity="0.35" />
+              <polygon points="260,282 265,275 270,283" fill="var(--accent-amber)" opacity="0.45" />
+              <polygon points="290,335 294,327 299,336" fill="var(--accent-amber)" opacity="0.35" />
 
-              {/* ════════════════════════════════════════
-                  LAYER 3: ESTIMATED ORIGIN
-                 ════════════════════════════════════════ */}
-
-              {/* Origin uncertainty radius */}
+              {/* LAYER 3: ESTIMATED ORIGIN */}
               <circle cx="195" cy="210" r="28" fill="url(#originGrad)" />
-              <circle cx="195" cy="210" r="28" fill="none" stroke="#F5B82E" strokeWidth="0.8" strokeDasharray="3 3" opacity="0.4" />
+              <circle
+                cx="195"
+                cy="210"
+                r="28"
+                fill="none"
+                stroke="var(--accent-amber)"
+                strokeWidth="0.8"
+                strokeDasharray="3 3"
+                opacity="0.4"
+              />
+              <circle cx="195" cy="210" r="4" fill="var(--accent-amber)" />
+              <circle
+                cx="195"
+                cy="210"
+                r="7"
+                fill="none"
+                stroke="var(--accent-amber)"
+                strokeWidth="1"
+                opacity="0.5"
+              />
 
-              {/* Origin point */}
-              <circle cx="195" cy="210" r="4" fill="#F5B82E" />
-              <circle cx="195" cy="210" r="7" fill="none" stroke="#F5B82E" strokeWidth="1" opacity="0.5" />
-
-              {/* ════════════════════════════════════════
-                  LAYER 4: OIL SPILL DETECTION REGION
-                 ════════════════════════════════════════ */}
-
-              {/* Spill polygon — irregular shape */}
+              {/* LAYER 4: OIL SPILL DETECTION REGION */}
               <path
                 d="M 290,340 Q 300,330 320,335 Q 340,340 350,355 Q 358,370 352,385 Q 342,400 325,405 Q 305,408 290,400 Q 275,390 272,375 Q 270,360 278,348 Z"
                 fill="url(#spillGrad)"
-                stroke="#FF4D6D"
+                stroke="var(--destructive)"
                 strokeWidth="1.5"
                 opacity="0.85"
               />
-              {/* Inner spill concentration */}
               <path
                 d="M 305,355 Q 315,348 325,355 Q 335,365 330,378 Q 322,388 310,385 Q 298,380 300,368 Z"
-                fill="#FF4D6D"
+                fill="var(--destructive)"
                 fillOpacity="0.18"
                 stroke="none"
               />
-              {/* Spill pulse ring */}
-              <circle cx="315" cy="370" r="18" fill="none" stroke="#FF4D6D" strokeWidth="0.8" opacity="0.35" className="landing-spill-pulse" />
+              <circle
+                cx="315"
+                cy="370"
+                r="18"
+                fill="none"
+                stroke="var(--destructive)"
+                strokeWidth="0.8"
+                opacity="0.35"
+                className="landing-spill-pulse"
+              />
 
-              {/* ════════════════════════════════════════
-                  LAYER 5: VESSEL MARKERS
-                 ════════════════════════════════════════ */}
-
-              {/* Vessel 1 — primary suspect, near origin */}
+              {/* LAYER 5: VESSEL MARKERS */}
               <g>
-                {/* Ship icon — small triangle */}
-                <polygon points="188,158 184,165 192,165" fill="#19B5E6" opacity="0.85" />
-                <circle cx="188" cy="161" r="8" fill="none" stroke="#19B5E6" strokeWidth="0.7" opacity="0.3" />
+                <polygon points="188,158 184,165 192,165" fill="var(--primary)" opacity="0.85" />
+                <circle
+                  cx="188"
+                  cy="161"
+                  r="8"
+                  fill="none"
+                  stroke="var(--primary)"
+                  strokeWidth="0.7"
+                  opacity="0.3"
+                />
+              </g>
+              <g>
+                <polygon points="240,225 236,232 244,232" fill="var(--primary)" opacity="0.6" />
+                <circle
+                  cx="240"
+                  cy="228"
+                  r="7"
+                  fill="none"
+                  stroke="var(--primary)"
+                  strokeWidth="0.6"
+                  opacity="0.2"
+                />
+              </g>
+              <g>
+                <polygon points="232,210 228,217 236,217" fill="var(--primary)" opacity="0.4" />
               </g>
 
-              {/* Vessel 2 — secondary, passes nearby */}
+              {/* LABELS */}
               <g>
-                <polygon points="240,225 236,232 244,232" fill="#19B5E6" opacity="0.6" />
-                <circle cx="240" cy="228" r="7" fill="none" stroke="#19B5E6" strokeWidth="0.6" opacity="0.2" />
-              </g>
-
-              {/* Vessel 3 — further away, weaker signal */}
-              <g>
-                <polygon points="232,210 228,217 236,217" fill="#19B5E6" opacity="0.4" />
-              </g>
-
-              {/* ════════════════════════════════════════
-                  LABELS (SVG text — positioned carefully)
-                 ════════════════════════════════════════ */}
-
-              {/* SAR DETECTION label — near spill */}
-              <g>
-                <rect x="340" y="343" width="86" height="18" rx="3" fill="#0A1018" fillOpacity="0.85" stroke="#FF4D6D" strokeWidth="0.6" opacity="0.8" />
-                <text x="383" y="355" textAnchor="middle" fill="#FF4D6D" fontSize="8" fontFamily="ui-monospace, SFMono-Regular, monospace" letterSpacing="0.1em" opacity="0.9">
+                <rect
+                  x="340"
+                  y="343"
+                  width="86"
+                  height="18"
+                  rx="3"
+                  fill="#0A1018"
+                  fillOpacity="0.85"
+                  stroke="var(--destructive)"
+                  strokeWidth="0.6"
+                  opacity="0.8"
+                />
+                <text
+                  x="383"
+                  y="355"
+                  textAnchor="middle"
+                  fill="var(--destructive)"
+                  fontSize="8"
+                  fontFamily="ui-monospace, SFMono-Regular, monospace"
+                  letterSpacing="0.1em"
+                  opacity="0.9"
+                >
                   SAR DETECTION
                 </text>
               </g>
-
-              {/* EST. ORIGIN label */}
               <g>
-                <rect x="130" y="188" width="54" height="16" rx="3" fill="#0A1018" fillOpacity="0.85" stroke="#F5B82E" strokeWidth="0.5" opacity="0.7" />
-                <text x="157" y="199" textAnchor="middle" fill="#F5B82E" fontSize="7" fontFamily="ui-monospace, SFMono-Regular, monospace" letterSpacing="0.1em" opacity="0.85">
+                <rect
+                  x="130"
+                  y="188"
+                  width="54"
+                  height="16"
+                  rx="3"
+                  fill="#0A1018"
+                  fillOpacity="0.85"
+                  stroke="var(--accent-amber)"
+                  strokeWidth="0.5"
+                  opacity="0.7"
+                />
+                <text
+                  x="157"
+                  y="199"
+                  textAnchor="middle"
+                  fill="var(--accent-amber)"
+                  fontSize="7"
+                  fontFamily="ui-monospace, SFMono-Regular, monospace"
+                  letterSpacing="0.1em"
+                  opacity="0.85"
+                >
                   EST. ORIGIN
                 </text>
               </g>
-
-              {/* DRIFT BACKTRACK label — along path */}
               <g>
-                <text x="228" y="290" fill="#F5B82E" fontSize="7" fontFamily="ui-monospace, SFMono-Regular, monospace" letterSpacing="0.08em" opacity="0.5" transform="rotate(-52, 228, 290)">
+                <text
+                  x="228"
+                  y="290"
+                  fill="var(--accent-amber)"
+                  fontSize="7"
+                  fontFamily="ui-monospace, SFMono-Regular, monospace"
+                  letterSpacing="0.08em"
+                  opacity="0.5"
+                  transform="rotate(-52, 228, 290)"
+                >
                   DRIFT BACKTRACK
                 </text>
               </g>
-
-              {/* AIS CORRELATION label — near vessels cluster */}
               <g>
-                <rect x="100" y="135" width="80" height="16" rx="3" fill="#0A1018" fillOpacity="0.8" stroke="#19B5E6" strokeWidth="0.5" opacity="0.6" />
-                <text x="140" y="146" textAnchor="middle" fill="#19B5E6" fontSize="7" fontFamily="ui-monospace, SFMono-Regular, monospace" letterSpacing="0.1em" opacity="0.7">
+                <rect
+                  x="100"
+                  y="135"
+                  width="80"
+                  height="16"
+                  rx="3"
+                  fill="#0A1018"
+                  fillOpacity="0.8"
+                  stroke="var(--primary)"
+                  strokeWidth="0.5"
+                  opacity="0.6"
+                />
+                <text
+                  x="140"
+                  y="146"
+                  textAnchor="middle"
+                  fill="var(--primary)"
+                  fontSize="7"
+                  fontFamily="ui-monospace, SFMono-Regular, monospace"
+                  letterSpacing="0.1em"
+                  opacity="0.7"
+                >
                   AIS CORRELATION
                 </text>
               </g>
 
-              {/* Vessel IDs */}
-              <text x="197" y="155" fill="#19B5E6" fontSize="6.5" fontFamily="ui-monospace, SFMono-Regular, monospace" opacity="0.5">V-01</text>
-              <text x="248" y="224" fill="#19B5E6" fontSize="6.5" fontFamily="ui-monospace, SFMono-Regular, monospace" opacity="0.4">V-02</text>
-              <text x="240" y="209" fill="#19B5E6" fontSize="6.5" fontFamily="ui-monospace, SFMono-Regular, monospace" opacity="0.3">V-03</text>
+              <text
+                x="197"
+                y="155"
+                fill="var(--primary)"
+                fontSize="6.5"
+                fontFamily="ui-monospace, SFMono-Regular, monospace"
+                opacity="0.5"
+              >
+                V-01
+              </text>
+              <text
+                x="248"
+                y="224"
+                fill="var(--primary)"
+                fontSize="6.5"
+                fontFamily="ui-monospace, SFMono-Regular, monospace"
+                opacity="0.4"
+              >
+                V-02
+              </text>
+              <text
+                x="240"
+                y="209"
+                fill="var(--primary)"
+                fontSize="6.5"
+                fontFamily="ui-monospace, SFMono-Regular, monospace"
+                opacity="0.3"
+              >
+                V-03
+              </text>
             </svg>
 
-            {/* ── Corner metadata overlays (HTML for crisp rendering) ── */}
-
-            {/* Top-left: System label */}
+            {/* Corner overlays */}
             <span
               className="font-mono"
               style={{
@@ -714,8 +946,6 @@ function LandingPage() {
             >
               Sentinel-1 SAR
             </span>
-
-            {/* Top-right: Status indicator */}
             <span
               className="font-mono"
               style={{
@@ -731,19 +961,18 @@ function LandingPage() {
               }}
             >
               <span
-                className="om-pulse-dot"
                 style={{
                   width: 5,
                   height: 5,
                   borderRadius: "50%",
-                  background: "#2ECF8B",
+                  background: "var(--muted-foreground)",
                   display: "inline-block",
                 }}
               />
-              <span style={{ color: "#2ECF8B", opacity: 0.8 }}>Analysis Active</span>
+              <span style={{ color: "var(--muted-foreground)", opacity: 0.8 }}>
+                Illustrative Data
+              </span>
             </span>
-
-            {/* Bottom-left: Coordinates */}
             <span
               className="font-mono"
               style={{
@@ -758,8 +987,6 @@ function LandingPage() {
             >
               15.25°N &nbsp;72.45°E
             </span>
-
-            {/* Bottom-right: Sector label */}
             <span
               className="font-mono"
               style={{
@@ -775,148 +1002,7 @@ function LandingPage() {
             >
               Arabian Sea Sector
             </span>
-          </div>
-        </div>
-      </section>
-
-      {/* ════════════════════════════════════════════════════════════
-          HOW IT WORKS — Four-Step Pipeline
-         ════════════════════════════════════════════════════════════ */}
-      <section
-        id="how-it-works"
-        style={{
-          borderTop: "1px solid var(--border)",
-          padding: "80px 32px",
-        }}
-      >
-        <div style={{ maxWidth: 1200, margin: "0 auto" }}>
-          {/* Section header */}
-          <div style={{ marginBottom: 56, maxWidth: 520 }}>
-            <div
-              className="font-mono"
-              style={{
-                fontSize: 11,
-                letterSpacing: "0.16em",
-                color: "var(--primary)",
-                marginBottom: 16,
-                textTransform: "uppercase",
-              }}
-            >
-              How It Works
             </div>
-            <h2
-              style={{
-                fontSize: "clamp(1.4rem, 3vw, 2rem)",
-                fontWeight: 700,
-                color: "var(--foreground)",
-                lineHeight: 1.2,
-                margin: 0,
-              }}
-            >
-              End-to-End Oil Spill Intelligence Pipeline
-            </h2>
-            <p
-              style={{
-                fontSize: 14,
-                lineHeight: 1.7,
-                color: "var(--muted-foreground)",
-                marginTop: 16,
-              }}
-            >
-              From satellite acquisition to actionable attribution — four
-              autonomous stages, one unified report.
-            </p>
-          </div>
-
-          {/* Pipeline grid */}
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: "repeat(4, 1fr)",
-              gap: 20,
-            }}
-            className="landing-pipeline-grid"
-          >
-            {PIPELINE.map((step) => {
-              const Icon = step.icon;
-              return (
-                <div
-                  key={step.num}
-                  style={{
-                    padding: "28px 28px 28px",
-                    borderRadius: 8,
-                    border: "1px solid var(--border)",
-                    borderTop: `2px solid ${step.accent}`,
-                    background: "var(--card)",
-                    position: "relative",
-                    transition: "border-color 0.2s",
-                  }}
-                  className="landing-pipeline-card"
-                >
-                  {/* Step number */}
-                  <div
-                    className="font-mono"
-                    style={{
-                      fontSize: 32,
-                      fontWeight: 800,
-                      color: step.accent,
-                      opacity: 0.12,
-                      position: "absolute",
-                      top: 18,
-                      right: 20,
-                      lineHeight: 1,
-                    }}
-                  >
-                    {step.num}
-                  </div>
-
-                  <div
-                    style={{
-                      width: 40,
-                      height: 40,
-                      borderRadius: 8,
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      background: `color-mix(in srgb, ${step.accent} 10%, transparent)`,
-                      marginBottom: 20,
-                    }}
-                  >
-                    <Icon
-                      style={{
-                        width: 20,
-                        height: 20,
-                        color: step.accent,
-                      }}
-                    />
-                  </div>
-
-                  <h3
-                    className="font-mono"
-                    style={{
-                      fontSize: 13,
-                      fontWeight: 700,
-                      color: "var(--foreground)",
-                      letterSpacing: "0.06em",
-                      marginBottom: 12,
-                      textTransform: "uppercase",
-                    }}
-                  >
-                    {step.title}
-                  </h3>
-                  <p
-                    style={{
-                      fontSize: 13,
-                      lineHeight: 1.65,
-                      color: "var(--muted-foreground)",
-                      margin: 0,
-                    }}
-                  >
-                    {step.desc}
-                  </p>
-                </div>
-              );
-            })}
           </div>
         </div>
       </section>
@@ -926,9 +1012,11 @@ function LandingPage() {
          ════════════════════════════════════════════════════════════ */}
       <section
         style={{
-          borderTop: "1px solid var(--border)",
           padding: "72px 32px",
           textAlign: "center",
+          background: "rgba(7,11,16,0.6)",
+          position: "relative",
+          zIndex: 2,
         }}
       >
         <div style={{ maxWidth: 560, margin: "0 auto" }}>
@@ -953,8 +1041,8 @@ function LandingPage() {
               marginTop: 14,
             }}
           >
-            Access the full operational dashboard with live incident data,
-            SAR detection, drift analysis, and vessel attribution.
+            Access the full operational dashboard with live incident data, SAR detection, drift
+            analysis, and vessel attribution.
           </p>
           <Link
             to="/overview"
@@ -989,52 +1077,41 @@ function LandingPage() {
       <footer
         className="font-mono"
         style={{
-          borderTop: "1px solid var(--border)",
-          padding: "24px 32px",
+          padding: "32px",
           textAlign: "center",
           fontSize: 11,
           color: "var(--muted-foreground)",
           letterSpacing: "0.04em",
+          display: "flex",
+          flexDirection: "column",
+          gap: "12px",
+          background: "rgba(9,14,21,0.8)",
+          position: "relative",
+          zIndex: 2,
         }}
       >
-        <span style={{ opacity: 0.7 }}>O.S.I.S.</span>
-        <span style={{ opacity: 0.3, margin: "0 8px" }}>·</span>
-        <span>SIH PS26143</span>
-        <span style={{ opacity: 0.3, margin: "0 8px" }}>·</span>
-        <span style={{ opacity: 0.6 }}>
-          Oil Spill Identification &amp; Source Attribution System
-        </span>
+        <div>
+          <span style={{ opacity: 0.7 }}>O.S.I.S.</span>
+          <span style={{ opacity: 0.3, margin: "0 8px" }}>·</span>
+          <span style={{ opacity: 0.6 }}>
+            Oil Spill Identification &amp; Source Attribution System
+          </span>
+        </div>
+        <div style={{ opacity: 0.5, fontSize: 10 }}>
+          Analytical evidence only, not legal attribution
+        </div>
       </footer>
 
       {/* ── Responsive overrides (injected as a style tag for self-containment) ── */}
       <style>{`
-        /* Default: two-column hero on desktop */
-        .landing-hero-grid {
-          grid-template-columns: 1fr 1fr !important;
-        }
-        .landing-pipeline-grid {
-          grid-template-columns: repeat(4, 1fr) !important;
-        }
-
-        /* Hero visual minimum height */
-        .landing-hero-visual {
-          min-height: 380px;
+        .landing-how-grid {
+          grid-template-columns: 1fr 1fr;
         }
 
         /* Tablet */
         @media (max-width: 960px) {
-          .landing-hero-grid {
-            grid-template-columns: 1fr !important;
-            gap: 48px !important;
-            padding-top: 56px !important;
-            padding-bottom: 48px !important;
-          }
-          .landing-hero-visual {
-            max-width: 520px;
-            margin: 0 auto;
-          }
-          .landing-pipeline-grid {
-            grid-template-columns: repeat(2, 1fr) !important;
+          .landing-how-grid {
+            grid-template-columns: 1fr;
           }
           .landing-bg-img {
             object-position: 52% 20% !important;
@@ -1043,12 +1120,6 @@ function LandingPage() {
 
         /* Mobile */
         @media (max-width: 600px) {
-          .landing-pipeline-grid {
-            grid-template-columns: 1fr !important;
-          }
-          .landing-hero-visual {
-            min-height: 300px;
-          }
           .landing-bg-img {
             object-position: 52% 16% !important;
           }
@@ -1100,6 +1171,44 @@ function LandingPage() {
         @media (prefers-reduced-motion: reduce) {
           .landing-currents-svg {
             animation: none !important;
+          }
+        }
+
+        .landing-feature-card {
+          border-radius: 10px;
+          border: 1px solid rgba(255,255,255,0.12);
+          background: rgba(8,16,28,0.72);
+          backdrop-filter: blur(6px);
+          -webkit-backdrop-filter: blur(6px);
+          overflow: hidden;
+          transition: border-color 0.2s, transform 0.2s;
+          display: block;
+          text-decoration: none;
+        }
+        .landing-feature-card:hover {
+          border-color: rgba(25,181,230,0.4);
+          transform: translateY(-2px);
+        }
+        .landing-feature-card:focus-visible {
+          outline: 2px solid var(--primary);
+          outline-offset: 2px;
+        }
+        
+        @media (max-width: 1023px) {
+          .landing-cards-grid {
+            grid-template-columns: repeat(2, 1fr) !important;
+          }
+        }
+        @media (max-width: 600px) {
+          .landing-text-col {
+            padding: 0 24px !important;
+            padding-top: 56px !important;
+            padding-bottom: 64px !important; /* change layout for mobile */
+          }
+          .landing-cards-grid {
+            grid-template-columns: repeat(2, 1fr) !important;
+            padding: 0 24px !important;
+            position: relative;
           }
         }
       `}</style>

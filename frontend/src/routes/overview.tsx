@@ -22,24 +22,21 @@ import {
   LayoutDashboard,
 } from "lucide-react";
 
-export const Route = createFileRoute("/overview")(
-  {
-    head: () => ({
-      meta: [
-        {
-          title:
-            "O.S.I.S. — Oil Spill Identification & Source Attribution System",
-        },
-        {
-          name: "description",
-          content:
-            "Operational satellite radar spill detection, Lagrangian hydrodynamic drift backtracking, and AIS vessel correlation for maritime surveillance.",
-        },
-      ],
-    }),
-    component: OverviewDashboard,
-  },
-);
+export const Route = createFileRoute("/overview")({
+  head: () => ({
+    meta: [
+      {
+        title: "O.S.I.S. — Oil Spill Identification & Source Attribution System",
+      },
+      {
+        name: "description",
+        content:
+          "Operational satellite radar spill detection, Lagrangian hydrodynamic drift backtracking, and AIS vessel correlation for maritime surveillance.",
+      },
+    ],
+  }),
+  component: OverviewDashboard,
+});
 
 const utc = (iso: string) => {
   if (!iso) return "N/A";
@@ -49,7 +46,14 @@ const utc = (iso: string) => {
 };
 
 function OverviewDashboard() {
-  const { activeReport, autoLoading, historyLoading } = useIncident();
+  const {
+    activeReport,
+    autoLoading,
+    historyLoading,
+    historyError,
+    refetchHistory,
+    isSwitchingIncident,
+  } = useIncident();
 
   // Loading state
   if (autoLoading || historyLoading) {
@@ -59,12 +63,31 @@ function OverviewDashboard() {
           <Loader2 className="h-7 w-7 animate-spin text-[var(--primary)]" />
         </div>
         <div>
-          <h1 className="text-lg font-bold text-foreground font-mono tracking-wide">
-            O.S.I.S.
-          </h1>
-          <p className="text-sm text-muted-foreground mt-1.5">
-            Initializing incident data…
+          <h1 className="text-lg font-bold text-foreground font-mono tracking-wide">O.S.I.S.</h1>
+          <p className="text-sm text-muted-foreground mt-1.5">Initializing incident data…</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Backend failure state
+  if (historyError) {
+    return (
+      <div className="mx-auto max-w-3xl py-16 space-y-8">
+        <div className="text-center space-y-4">
+          <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-md border border-destructive/20 bg-destructive/5">
+            <AlertTriangle className="h-6 w-6 text-destructive" />
+          </div>
+          <h1 className="text-2xl font-bold tracking-tight text-foreground">Connection Failed</h1>
+          <p className="text-sm text-muted-foreground">
+            Backend server unreachable: {historyError.message}
           </p>
+          <button
+            onClick={() => refetchHistory()}
+            className="inline-flex items-center gap-2 rounded-md bg-secondary border border-border px-5 py-2.5 text-xs font-mono font-semibold text-foreground mt-4 hover:bg-secondary/80 transition-colors"
+          >
+            Retry Connection
+          </button>
         </div>
       </div>
     );
@@ -72,22 +95,34 @@ function OverviewDashboard() {
 
   // No report loaded — prompt to analyze
   if (!activeReport) {
+    if (isSwitchingIncident) {
+      return (
+        <div className="mx-auto max-w-5xl py-8 space-y-6 animate-pulse">
+          <div className="h-64 rounded border border-border bg-card/50"></div>
+          <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
+            {[1, 2, 3, 4].map((i) => (
+              <div key={i} className="h-24 rounded border border-border bg-card/50"></div>
+            ))}
+          </div>
+          <div className="h-96 rounded border border-border bg-card/50"></div>
+        </div>
+      );
+    }
+
     return (
       <div className="mx-auto max-w-3xl py-16 space-y-8">
         <div className="text-center space-y-4">
           <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-md border border-[var(--primary)]/20 bg-[var(--primary)]/5">
             <LayoutDashboard className="h-6 w-6 text-[var(--primary)]" />
           </div>
-          <h1 className="text-2xl font-bold tracking-tight text-foreground">
-            O.S.I.S.
-          </h1>
+          <h1 className="text-2xl font-bold tracking-tight text-foreground">O.S.I.S.</h1>
           <p className="text-sm text-muted-foreground">
             Oil Spill Identification &amp; Source Attribution System
           </p>
           <p className="text-xs text-muted-foreground max-w-lg mx-auto leading-relaxed">
-            Autonomous pipeline integrating Sentinel-1 SAR detection,
-            Lagrangian drift backtracking, and AIS vessel correlation to detect
-            marine spills, locate origins, and identify candidate sources.
+            Autonomous pipeline integrating Sentinel-1 SAR detection, Lagrangian drift backtracking,
+            and AIS vessel correlation to detect marine spills, locate origins, and identify
+            candidate sources.
           </p>
           <Link
             to="/analysis"
@@ -102,8 +137,7 @@ function OverviewDashboard() {
   }
 
   const report = activeReport;
-  const { spill, origin, candidates, anomalies, outcome, backward, forward } =
-    report;
+  const { spill, origin, candidates, anomalies, outcome, backward, forward } = report;
   const topCandidate = candidates[0] ?? null;
   const incidentLabel = getIncidentLabel(report);
   const isSpillDetected = outcome === "SPILL_DETECTED" && !!spill;
@@ -125,17 +159,20 @@ function OverviewDashboard() {
           ]
         : [15.25, 72.45];
 
-
   // Pipeline stages: Detection -> Drift -> AIS Correlation -> Attribution
   const pipelineSteps = [
     {
       stage: "Detection",
       label: "Satellite Spill Detection",
       icon: Radar,
-      status: spill ? ("completed" as const) : isNoSpill ? ("completed" as const) : ("inconclusive" as const),
+      status: spill
+        ? ("completed" as const)
+        : isNoSpill
+          ? ("completed" as const)
+          : ("inconclusive" as const),
       statusBadge: spill ? "Completed" : isNoSpill ? "Clean (Completed)" : "Inconclusive",
       result: spill
-        ? `Candidate spill identified (${(spill.maskAreaKm2 ?? spill.metrics.areaKm2)} km², ${(spill.confidence * 100).toFixed(0)}% confidence)`
+        ? `Candidate spill identified (${spill.maskAreaKm2 ?? spill.metrics.areaKm2} km², ${(spill.confidence * 100).toFixed(0)}% confidence)`
         : isNoSpill
           ? "No dark-slick detected above backscatter threshold"
           : "SAR imagery classification inconclusive",
@@ -147,15 +184,28 @@ function OverviewDashboard() {
       status: origin
         ? ("completed" as const)
         : hasDrift
-          ? (report.stageStatus?.["forecast"]?.status === "partial" ? ("partial" as const) : ("completed" as const))
+          ? report.stageStatus?.["forecast"]?.status === "partial"
+            ? ("partial" as const)
+            : ("completed" as const)
           : isNoSpill
             ? ("not_assessed" as const)
             : ("unavailable" as const),
-      statusBadge: origin ? "Completed" : hasDrift ? (report.stageStatus?.["forecast"]?.status === "partial" ? "Partial" : "Completed") : isNoSpill ? "Not Assessed" : "Unavailable",
+      statusBadge: origin
+        ? "Completed"
+        : hasDrift
+          ? report.stageStatus?.["forecast"]?.status === "partial"
+            ? "Partial"
+            : "Completed"
+          : isNoSpill
+            ? "Not Assessed"
+            : "Unavailable",
       result: origin
         ? `${report.hindcastHours || 6}h Hindcast → Origin → ${report.forecastHours || 24}h Forecast (±${origin.uncertaintyKm} km)`
         : hasDrift
-          ? (report.stageStatus?.["forecast"]?.status === "partial" ? (report.stageStatus?.["forecast"]?.reason || "Trajectory truncated: reached land or data boundary") : `Drift trajectory computed (${driftPath.length} steps)`)
+          ? report.stageStatus?.["forecast"]?.status === "partial"
+            ? report.stageStatus?.["forecast"]?.reason ||
+              "Trajectory truncated: reached land or data boundary"
+            : `Drift trajectory computed (${driftPath.length} steps)`
           : isNoSpill
             ? "Drift analysis skipped — clean sea surface"
             : "Hydrodynamic advection data unavailable",
@@ -164,14 +214,22 @@ function OverviewDashboard() {
       stage: "AIS Correlation",
       label: "Spatiotemporal AIS Correlation",
       icon: Ship,
-      status: candidates.length > 0
-        ? ("completed" as const)
-        : isNoSpill
-          ? ("not_assessed" as const)
-          : report?.stageStatus?.["ais"]?.status === "unavailable"
-            ? ("unavailable" as const)
-            : ("incomplete" as const),
-      statusBadge: candidates.length > 0 ? "Completed" : isNoSpill ? "Not Assessed" : report?.stageStatus?.["ais"]?.status === "unavailable" ? "Unavailable" : "No Candidates",
+      status:
+        candidates.length > 0
+          ? ("completed" as const)
+          : isNoSpill
+            ? ("not_assessed" as const)
+            : report?.stageStatus?.["ais"]?.status === "unavailable"
+              ? ("unavailable" as const)
+              : ("incomplete" as const),
+      statusBadge:
+        candidates.length > 0
+          ? "Completed"
+          : isNoSpill
+            ? "Not Assessed"
+            : report?.stageStatus?.["ais"]?.status === "unavailable"
+              ? "Unavailable"
+              : "No Candidates",
       result:
         candidates.length > 0
           ? `${candidates.length} candidate vessel${candidates.length !== 1 ? "s" : ""} correlated with release corridor`
@@ -205,13 +263,23 @@ function OverviewDashboard() {
   const kpis = [
     {
       label: "Spill Area",
-      value: spill ? `${(spill.maskAreaKm2 ?? spill.metrics.areaKm2)} km²` : isNoSpill ? "Clean" : "—",
-      detail: spill ? `${spill.metrics.lengthM.toFixed(0)}m × ${spill.metrics.widthM.toFixed(0)}m` : "SAR segmentation",
+      value: spill
+        ? `${spill.maskAreaKm2 ?? spill.metrics.areaKm2} km²`
+        : isNoSpill
+          ? "Clean"
+          : "—",
+      detail: spill
+        ? `${spill.metrics.lengthM.toFixed(0)}m × ${spill.metrics.widthM.toFixed(0)}m`
+        : "SAR segmentation",
       color: "var(--accent-blue)",
     },
     {
       label: "Estimated Age",
-      value: report.age ? `${report.age.minHours}–${report.age.maxHours}h` : isNoSpill ? "N/A" : "—",
+      value: report.age
+        ? `${report.age.minHours}–${report.age.maxHours}h`
+        : isNoSpill
+          ? "N/A"
+          : "—",
       detail: report.age ? `${report.age.confidence} confidence` : "Morphological window",
       color: "var(--accent-amber)",
     },
@@ -224,7 +292,9 @@ function OverviewDashboard() {
     {
       label: "Origin",
       value: origin ? `${origin.lat.toFixed(3)}°N` : isNoSpill ? "N/A" : "—",
-      detail: origin ? `${origin.lon.toFixed(3)}°E · ±${origin.uncertaintyKm} km` : "Backtracked origin",
+      detail: origin
+        ? `${origin.lon.toFixed(3)}°E · ±${origin.uncertaintyKm} km`
+        : "Backtracked origin",
       color: "var(--accent-amber)",
     },
     {
@@ -265,7 +335,7 @@ function OverviewDashboard() {
                   {incidentLabel}
                 </h2>
                 {isDemo && (
-                  <span className="rounded border border-amber-500/30 bg-amber-500/10 px-1.5 py-0.5 text-[9px] font-mono font-semibold uppercase text-amber-300">
+                  <span className="rounded border border-amber-500/30 bg-amber-500/10 px-1.5 py-0.5 text-[10px] font-mono font-semibold uppercase text-amber-300">
                     Synthetic Demo
                   </span>
                 )}
@@ -288,7 +358,8 @@ function OverviewDashboard() {
                 </span>
                 {report.scene.polarization && (
                   <span>
-                    Pol: <strong className="text-foreground">{String(report.scene.polarization)}</strong>
+                    Pol:{" "}
+                    <strong className="text-foreground">{String(report.scene.polarization)}</strong>
                   </span>
                 )}
               </div>
@@ -302,7 +373,7 @@ function OverviewDashboard() {
               <div
                 key={kpi.label}
                 className="rounded-md border border-border bg-[var(--background)]/60 p-3.5 space-y-1.5 om-slide-up"
-                style={{ borderTopColor: kpi.color, borderTopWidth: '2px' }}
+                style={{ borderTopColor: kpi.color, borderTopWidth: "2px" }}
               >
                 <span className="text-[10px] uppercase text-muted-foreground tracking-wider font-mono block">
                   {kpi.label}
@@ -310,7 +381,7 @@ function OverviewDashboard() {
                 <span className="text-xl font-bold text-foreground tabular-nums font-mono block">
                   {kpi.value}
                 </span>
-                <span className="text-[9px] text-muted-foreground block font-mono truncate">
+                <span className="text-[11px] text-muted-foreground block font-mono truncate">
                   {kpi.detail}
                 </span>
               </div>
@@ -333,7 +404,7 @@ function OverviewDashboard() {
         }
       >
         <OceanMap
-          height={440}
+          height={500}
           initialCenter={mapCenter}
           initialZoom={1.4}
           legend={
@@ -490,10 +561,10 @@ function OverviewDashboard() {
                     {statusIcon}
                     <div>
                       <div className="flex items-center gap-2">
-                        <span className="text-xs font-semibold text-foreground">
-                          {step.label}
-                        </span>
-                        <span className={`rounded-md px-1.5 py-0.5 text-[9px] font-mono uppercase tracking-wider border ${statusColor}`}>
+                        <span className="text-xs font-semibold text-foreground">{step.label}</span>
+                        <span
+                          className={`rounded-md px-1.5 py-0.5 text-[10px] font-mono uppercase tracking-wider border ${statusColor}`}
+                        >
                           {step.statusBadge}
                         </span>
                       </div>
@@ -512,10 +583,38 @@ function OverviewDashboard() {
       {/* 4. QUICK NAVIGATION CARDS */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {[
-          { to: "/satellite" as const, icon: Radar, iconColor: "text-[var(--accent-blue)]", iconBg: "bg-[var(--accent-blue)]/10", title: "Detection", desc: "SAR imagery analysis & spill geometry" },
-          { to: "/backtracking" as const, icon: Compass, iconColor: "text-amber-400", iconBg: "bg-amber-400/10", title: "Drift Analysis", desc: "Backward origin estimation & forward prediction" },
-          { to: "/ais" as const, icon: Ship, iconColor: "text-[var(--accent-blue)]", iconBg: "bg-[var(--accent-blue)]/10", title: "Vessel Attribution", desc: "AIS correlation & candidate ranking" },
-          { to: "/analysis" as const, icon: Layers, iconColor: "text-emerald-400", iconBg: "bg-emerald-400/10", title: "Full Investigation", desc: "Complete evidence report & technical details" },
+          {
+            to: "/satellite" as const,
+            icon: Radar,
+            iconColor: "text-[var(--accent-blue)]",
+            iconBg: "bg-[var(--accent-blue)]/10",
+            title: "Detection",
+            desc: "SAR imagery analysis & spill geometry",
+          },
+          {
+            to: "/backtracking" as const,
+            icon: Compass,
+            iconColor: "text-amber-400",
+            iconBg: "bg-amber-400/10",
+            title: "Drift Analysis",
+            desc: "Backward origin estimation & forward prediction",
+          },
+          {
+            to: "/ais" as const,
+            icon: Ship,
+            iconColor: "text-[var(--accent-blue)]",
+            iconBg: "bg-[var(--accent-blue)]/10",
+            title: "Vessel Attribution",
+            desc: "AIS correlation & candidate ranking",
+          },
+          {
+            to: "/analysis" as const,
+            icon: Layers,
+            iconColor: "text-emerald-400",
+            iconBg: "bg-emerald-400/10",
+            title: "Full Investigation",
+            desc: "Complete evidence report & technical details",
+          },
         ].map((card) => {
           const CardIcon = card.icon;
           return (
@@ -525,7 +624,9 @@ function OverviewDashboard() {
               className="rounded-md border border-border bg-card p-4 space-y-3 hover:border-[var(--primary)]/40 transition-colors group"
             >
               <div className="flex items-center justify-between">
-                <div className={`flex h-8 w-8 items-center justify-center rounded-md ${card.iconBg}`}>
+                <div
+                  className={`flex h-8 w-8 items-center justify-center rounded-md ${card.iconBg}`}
+                >
                   <CardIcon className={`h-4 w-4 ${card.iconColor}`} />
                 </div>
                 <ArrowRight className="h-3.5 w-3.5 text-muted-foreground group-hover:text-[var(--primary)] transition-colors" />

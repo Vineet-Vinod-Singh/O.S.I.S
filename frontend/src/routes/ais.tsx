@@ -2,7 +2,15 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useState } from "react";
 import { Marker, OceanMap, MapPolyline, MapCircle } from "../components/OceanMap";
 
-import { KeyVal, Meter, Modal, OutcomeBadge, Panel, StatusDot } from "../components/ui-kit";
+import {
+  KeyVal,
+  Meter,
+  Modal,
+  OutcomeBadge,
+  Panel,
+  StatusDot,
+  ReportSkeleton,
+} from "../components/ui-kit";
 import { useIncident } from "../context/IncidentContext";
 import {
   Ship,
@@ -59,21 +67,7 @@ function AisPage() {
   const [open, setOpen] = useState(false);
 
   if (autoLoading || historyLoading || isSwitchingIncident) {
-    return (
-      <div className="mx-auto max-w-4xl py-16 text-center space-y-4">
-        <div className="mx-auto flex h-14 w-14 items-center justify-center rounded border border-border bg-secondary">
-          <Ship className="h-6 w-6 animate-spin text-[var(--accent-blue)]" />
-        </div>
-        <div>
-          <h2 className="text-base font-semibold text-foreground font-mono">
-            Loading AIS Vessel Correlation…
-          </h2>
-          <p className="text-xs text-muted-foreground mt-1">
-            Matching vessel trajectories against release envelope.
-          </p>
-        </div>
-      </div>
-    );
+    return <ReportSkeleton />;
   }
 
   if (!activeReport) {
@@ -88,13 +82,15 @@ function AisPage() {
             AIS Spatiotemporal Vessel Correlation
           </h1>
           <p className="text-sm text-muted-foreground">
-            No active incident loaded. Select an incident from the header dropdown or run an analysis from the Investigation page.
+            No active incident loaded. Select an incident from the header dropdown or run an
+            analysis from the Investigation page.
           </p>
         </div>
         <Panel className="flex flex-col items-center justify-center p-12 text-center space-y-4">
           <p className="text-sm font-medium text-foreground">No active incident analysis</p>
           <p className="text-xs text-muted-foreground max-w-sm">
-            Load an incident to correlate AIS vessel tracks against the estimated spill release corridor.
+            Load an incident to correlate AIS vessel tracks against the estimated spill release
+            corridor.
           </p>
           <Link
             to="/analysis"
@@ -145,7 +141,6 @@ function AisPage() {
           ]
         : [15.25, 72.45];
 
-
   return (
     <div className="space-y-6">
       {/* 1. SECTION HEADER */}
@@ -187,7 +182,8 @@ function AisPage() {
           <p className="text-muted-foreground">
             {isNoSpill
               ? "AIS vessel correlation is not performed when no oil spill is detected on the water."
-              : report.outcomeMessage || "AIS vessel correlation inconclusive due to uncertain release origin window."}
+              : report.outcomeMessage ||
+                "AIS vessel correlation inconclusive due to uncertain release origin window."}
           </p>
         </div>
       )}
@@ -199,7 +195,9 @@ function AisPage() {
             <span>No Compatible Vessel Identified</span>
           </div>
           <p className="text-muted-foreground">
-            No AIS transponder tracks intersected the modeled origin region (±{origin?.uncertaintyKm ?? 5} km) during the estimated release window ({utc(origin?.releaseWindow.start ?? "")} – {utc(origin?.releaseWindow.end ?? "")}).
+            No AIS transponder tracks intersected the modeled origin region (±
+            {origin?.uncertaintyKm ?? 5} km) during the estimated release window (
+            {utc(origin?.releaseWindow.start ?? "")} – {utc(origin?.releaseWindow.end ?? "")}).
           </p>
         </div>
       )}
@@ -209,7 +207,7 @@ function AisPage() {
         <Panel
           title="Vessel Track Cartography &amp; Corridor Intersections"
           badge={
-            <span className="rounded bg-secondary/80 px-1.5 py-0.2 text-[9px] font-mono text-muted-foreground uppercase">
+            <span className="rounded bg-secondary/80 px-1.5 py-0.2 text-[10px] font-mono text-muted-foreground uppercase">
               Temporal Tracks
             </span>
           }
@@ -284,7 +282,7 @@ function AisPage() {
 
             {/* Candidate Tracks */}
             {hasVessels &&
-              candidates.map((c) => {
+              sortedCandidates.map((c) => {
                 const active = c.mmsi === effectiveMmsi;
                 const segments: { longitude: number; latitude: number }[][] =
                   c.trackSegments && c.trackSegments.length > 0 ? c.trackSegments : [c.track];
@@ -356,15 +354,32 @@ function AisPage() {
           <Panel
             title="Correlated Candidate Vessels"
             badge={
-              <span className="rounded bg-secondary/80 px-1.5 py-0.2 text-[9px] font-mono text-muted-foreground uppercase">
+              <span className="rounded bg-secondary/80 px-1.5 py-0.2 text-[10px] font-mono text-muted-foreground uppercase">
                 {candidates.length} Ranked
               </span>
             }
           >
             {hasVessels ? (
               <div className="space-y-3">
+                <div className="flex items-center justify-between pb-2">
+                  <label htmlFor="sort" className="text-xs text-muted-foreground">
+                    Sort By:
+                  </label>
+                  <select
+                    id="sort"
+                    value={sort}
+                    onChange={(e) => setSort(e.target.value as SortKey)}
+                    className="bg-card border border-border text-xs rounded px-2 py-1 outline-none focus:border-primary"
+                  >
+                    {SORTS.map((s) => (
+                      <option key={s.key} value={s.key}>
+                        {s.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
                 <ul className="space-y-2">
-                  {candidates.map((c) => {
+                  {sortedCandidates.map((c) => {
                     const active = c.mmsi === effectiveMmsi;
                     const gapCount = anomalies.filter((a) => a.mmsi === c.mmsi).length;
 
@@ -390,7 +405,7 @@ function AisPage() {
                           <div className="text-[11px] text-muted-foreground mt-1">
                             {c.type} &middot; MMSI {c.mmsi}
                           </div>
-                          <div className="flex items-center justify-between text-[10px] text-muted-foreground/90 mt-2 border-t border-border/40 pt-1.5">
+                          <div className="flex items-center justify-between text-[11px] text-muted-foreground/90 mt-2 border-t border-border/40 pt-1.5">
                             <span>Origin Dist: {c.closestDistanceKm.toFixed(1)} km</span>
                             <span>Time Δ: {c.timeDifferenceHours.toFixed(1)} h</span>
                             {gapCount > 0 && (
@@ -437,7 +452,7 @@ function AisPage() {
                 <div>&bull; Coastal radar antenna shadowing</div>
                 <div>&bull; Severe weather atmospheric attenuation</div>
               </div>
-              <p className="text-[10px] text-muted-foreground/80 italic">
+              <p className="text-[11px] text-muted-foreground/80 italic">
                 Discontinuities are evaluated as mathematical factors, never assumed criminal proof.
               </p>
             </div>
@@ -447,7 +462,8 @@ function AisPage() {
           <Panel title="Next Stage">
             <div className="space-y-2 text-xs">
               <p className="text-muted-foreground leading-relaxed">
-                Review complete analytical findings, evidence chain, and limitation audit on the final Investigation dashboard.
+                Review complete analytical findings, evidence chain, and limitation audit on the
+                final Investigation dashboard.
               </p>
               <Link
                 to="/analysis"
@@ -466,7 +482,7 @@ function AisPage() {
         <Panel
           title="Ranked Candidate Vessel Attribution Dossiers"
           badge={
-            <span className="rounded bg-primary/20 text-primary border border-primary/30 px-1.5 py-0.2 text-[9px] font-mono font-semibold uppercase">
+            <span className="rounded bg-primary/20 text-primary border border-primary/30 px-1.5 py-0.2 text-[10px] font-mono font-semibold uppercase">
               {candidates.length} Scored Candidates
             </span>
           }
@@ -492,7 +508,8 @@ function AisPage() {
         >
           <div className="space-y-4">
             <p className="text-xs text-muted-foreground">
-              Candidate vessels evaluated across physical proximity to the modeled origin, temporal coincidence, AIS broadcast continuity, and vessel classification priors.
+              Candidate vessels evaluated across physical proximity to the modeled origin, temporal
+              coincidence, AIS broadcast continuity, and vessel classification priors.
             </p>
 
             <div className="overflow-x-auto">
@@ -524,9 +541,13 @@ function AisPage() {
                         onClick={() => select(c.mmsi)}
                       >
                         <td className="py-3 pr-4">
-                          <span className={`inline-flex items-center justify-center rounded px-2 py-0.5 text-xs font-bold font-mono ${
-                            isTop ? "bg-amber-500/20 text-amber-300 border border-amber-500/30" : "bg-secondary text-foreground border border-border"
-                          }`}>
+                          <span
+                            className={`inline-flex items-center justify-center rounded px-2 py-0.5 text-xs font-bold font-mono ${
+                              isTop
+                                ? "bg-amber-500/20 text-amber-300 border border-amber-500/30"
+                                : "bg-secondary text-foreground border border-border"
+                            }`}
+                          >
                             #{c.rank}
                           </span>
                         </td>
@@ -541,7 +562,7 @@ function AisPage() {
                             <span className="font-bold text-foreground tabular-nums text-sm">
                               {c.score}
                             </span>
-                            <span className="text-[10px] text-muted-foreground">/ 100</span>
+                            <span className="text-[11px] text-muted-foreground">/ 100</span>
                           </div>
                           <div className="mt-1 h-1.5 w-full overflow-hidden rounded bg-secondary">
                             <div
@@ -557,17 +578,35 @@ function AisPage() {
                           </div>
                         </td>
                         <td className="py-3 pr-4 tabular-nums">
-                          <span className={c.closestDistanceKm < 5 ? "text-emerald-400 font-semibold" : "text-foreground"}>
+                          <span
+                            className={
+                              c.closestDistanceKm < 5
+                                ? "text-emerald-400 font-semibold"
+                                : "text-foreground"
+                            }
+                          >
                             {c.closestDistanceKm.toFixed(1)} km
                           </span>
                         </td>
                         <td className="py-3 pr-4 tabular-nums">
-                          <span className={c.timeDifferenceHours < 3 ? "text-emerald-400 font-semibold" : "text-foreground"}>
+                          <span
+                            className={
+                              c.timeDifferenceHours < 3
+                                ? "text-emerald-400 font-semibold"
+                                : "text-foreground"
+                            }
+                          >
                             {c.timeDifferenceHours.toFixed(1)} h
                           </span>
                         </td>
                         <td className="py-3 pr-4 tabular-nums">
-                          <span className={c.aisContinuity < 0.8 ? "text-amber-400 font-semibold" : "text-foreground"}>
+                          <span
+                            className={
+                              c.aisContinuity < 0.8
+                                ? "text-amber-400 font-semibold"
+                                : "text-foreground"
+                            }
+                          >
                             {(c.aisContinuity * 100).toFixed(0)}%
                           </span>
                         </td>
@@ -601,7 +640,7 @@ function AisPage() {
         <Panel
           title="AIS Discontinuity Log &middot; Objective Observations"
           badge={
-            <span className="rounded bg-amber-500/20 text-amber-300 border border-amber-500/40 px-1.5 py-0.2 text-[9px] font-mono font-semibold uppercase">
+            <span className="rounded bg-amber-500/20 text-amber-300 border border-amber-500/40 px-1.5 py-0.2 text-[10px] font-mono font-semibold uppercase">
               {anomalies.length} Incident Gaps
             </span>
           }
@@ -619,7 +658,7 @@ function AisPage() {
                 >
                   <div className="flex items-center justify-between">
                     <span className="font-bold text-foreground">MMSI {a.mmsi}</span>
-                    <span className="rounded bg-amber-500/20 px-2 py-0.5 text-[10px] font-bold text-amber-300 border border-amber-500/30">
+                    <span className="rounded bg-amber-500/20 px-2 py-0.5 text-[11px] font-bold text-amber-300 border border-amber-500/30">
                       {a.durationHours}h unobserved
                     </span>
                   </div>
@@ -627,7 +666,7 @@ function AisPage() {
                     {utc(a.start.timestamp)} &rarr; {utc(a.end.timestamp)}
                   </div>
                   <div className="text-[11px] text-foreground/80 font-sans">{a.label}</div>
-                  <div className="text-[10px] text-muted-foreground pt-1 border-t border-border/40">
+                  <div className="text-[11px] text-muted-foreground pt-1 border-t border-border/40">
                     Relevance Metric: {a.anomalyScore}
                   </div>
                 </div>
@@ -663,7 +702,7 @@ function AisPage() {
             <div className="border-t border-border/50 pt-3 text-[11px] text-foreground/90 font-sans leading-relaxed">
               <strong>Evidence Summary:</strong> {selected.evidence}
             </div>
-            <p className="text-[10px] text-muted-foreground italic pt-1">
+            <p className="text-[11px] text-muted-foreground italic pt-1">
               Analytical compatibility score — not legal attribution or proof of discharge.
             </p>
           </div>

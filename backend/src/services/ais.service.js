@@ -216,7 +216,7 @@ class AISService {
   processMessage(data) {
     this.diagTotalMsgs++;
     try {
-      const message = typeof data === 'string' ? JSON.parse(data) : data;
+      const message = Buffer.isBuffer(data) ? JSON.parse(data.toString()) : (typeof data === 'string' ? JSON.parse(data) : data);
       if (message.MessageType === 'PositionReport') {
         this.diagPosReports++;
         const report = message.Message.PositionReport || {};

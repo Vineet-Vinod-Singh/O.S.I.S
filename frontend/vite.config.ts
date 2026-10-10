@@ -8,6 +8,9 @@ import { defineConfig } from "@lovable.dev/vite-tanstack-config";
 
 export default defineConfig({
   vite: {
+    resolve: {
+      tsconfigPaths: true,
+    },
     optimizeDeps: {
       // React Store imports this CJS shim by named export; prebundle it for browser ESM.
       include: ["use-sync-external-store/shim/with-selector", "use-sync-external-store/shim"],
