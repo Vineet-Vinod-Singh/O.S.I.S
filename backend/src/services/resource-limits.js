@@ -12,6 +12,8 @@ module.exports = {
     downloadBytes: bounded('OSIS_DOWNLOAD_MAX_MIB', 8, 8) * 1024 * 1024,
     requestMs: bounded('OSIS_REQUEST_TIMEOUT_MS', 15000, 60000),
     maxReports: bounded('OSIS_MAX_REPORTS', 100, 100),
+    minFreeStorageBytes: bounded('OSIS_MIN_FREE_SPACE_MIB', 1024, 1024 * 1024) * 1024 * 1024,
+    failedArtifactRetentionHours: bounded('OSIS_FAILED_ARTIFACT_RETENTION_HOURS', 168, 24 * 365),
     analysesPerMinute: bounded('OSIS_ANALYSES_PER_MINUTE', 20, 30),
     maxAoiDegrees: 0.2,
 };

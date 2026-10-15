@@ -20,13 +20,16 @@ import {
   Loader2,
   Activity,
   ShieldAlert,
+  ArrowRight,
+  AlertTriangle,
 } from "lucide-react";
-
 import appCss from "../styles.css?url";
 import { reportLovableError } from "../lib/lovable-error-reporting";
 import { IncidentProvider, useIncident } from "../context/IncidentContext";
+import { Toaster } from "sonner";
 import { OutcomeBadge } from "../components/ui-kit";
 import { getIncidentLabel } from "../api/incidents";
+import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 
 const NAV: { to: string; label: string; icon: typeof LayoutDashboard; exact?: boolean }[] = [
   { to: "/overview", label: "Overview", icon: LayoutDashboard, exact: true },
@@ -95,35 +98,32 @@ function ErrorComponent({ error, reset }: { error: Error; reset: () => void }) {
   );
 }
 
-export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
-  {
-    head: () => ({
-      meta: [
-        { charSet: "utf-8" },
-        { name: "viewport", content: "width=device-width, initial-scale=1" },
-        {
-          title:
-            "O.S.I.S. — Oil Spill Identification & Source Attribution System",
-        },
-        {
-          name: "description",
-          content:
-            "Satellite SAR oil spill detection with hydrodynamic Lagrangian drift backtracking and AIS vessel attribution.",
-        },
-        { property: "og:type", content: "website" },
-        { name: "twitter:card", content: "summary_large_image" },
-      ],
-      links: [
-        { rel: "stylesheet", href: appCss },
-        { rel: "icon", href: "/favicon.ico", type: "image/x-icon" },
-      ],
-    }),
-    shellComponent: RootShell,
-    component: RootComponent,
-    notFoundComponent: NotFoundComponent,
-    errorComponent: ErrorComponent,
-  },
-);
+export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()({
+  head: () => ({
+    meta: [
+      { charSet: "utf-8" },
+      { name: "viewport", content: "width=device-width, initial-scale=1" },
+      {
+        title: "O.S.I.S. — Oil Spill Identification & Source Attribution System",
+      },
+      {
+        name: "description",
+        content:
+          "Satellite SAR oil spill detection with hydrodynamic Lagrangian drift backtracking and AIS vessel attribution.",
+      },
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary_large_image" },
+    ],
+    links: [
+      { rel: "stylesheet", href: appCss },
+      { rel: "icon", href: "/favicon.ico", type: "image/x-icon" },
+    ],
+  }),
+  shellComponent: RootShell,
+  component: RootComponent,
+  notFoundComponent: NotFoundComponent,
+  errorComponent: ErrorComponent,
+});
 
 function RootShell({ children }: { children: ReactNode }) {
   return (
@@ -152,7 +152,15 @@ function RootComponent() {
 }
 
 function IncidentSelector() {
-  const { activeReport, history, historyLoading, setActiveReportId, autoLoading, isSwitchingIncident } = useIncident();
+  const {
+    activeReport,
+    history,
+    historyLoading,
+    historyError,
+    setActiveReportId,
+    autoLoading,
+    isSwitchingIncident,
+  } = useIncident();
   const [open, setOpen] = useState(false);
 
   const currentLabel = activeReport ? getIncidentLabel(activeReport) : "No incident selected";
@@ -166,97 +174,108 @@ function IncidentSelector() {
   }, {});
 
   return (
-    <div className="relative">
-      <button
-        type="button"
-        onClick={() => setOpen(!open)}
-        className="inline-flex items-center gap-2 rounded border border-border bg-secondary/80 px-3 py-1.5 text-xs font-mono text-foreground hover:bg-secondary transition-colors"
-      >
-        <span className="text-muted-foreground text-[10px] uppercase tracking-wider">Incident:</span>
-        {autoLoading || historyLoading || isSwitchingIncident ? (
-          <span className="flex items-center gap-1.5">
-            <Loader2 className="h-3 w-3 animate-spin" />
-            <span>Loading…</span>
+    <DropdownMenu.Root open={open} onOpenChange={setOpen}>
+      <DropdownMenu.Trigger asChild>
+        <button
+          type="button"
+          className="inline-flex items-center gap-2 rounded border border-border bg-secondary/80 px-3 py-1.5 text-xs font-mono text-foreground hover:bg-secondary transition-colors"
+        >
+          <span className="text-muted-foreground text-[10px] uppercase tracking-wider">
+            Incident:
           </span>
-        ) : (
-          <span className="font-semibold">{currentLabel}</span>
-        )}
-        <ChevronDown className="h-3 w-3 text-muted-foreground" />
-      </button>
+          {autoLoading || historyLoading || isSwitchingIncident ? (
+            <span className="flex items-center gap-1.5">
+              <Loader2 className="h-3 w-3 animate-spin" />
+              <span>Loading…</span>
+            </span>
+          ) : (
+            <span className="font-semibold">{currentLabel}</span>
+          )}
+          <ChevronDown className="h-3 w-3 text-muted-foreground" />
+        </button>
+      </DropdownMenu.Trigger>
 
-      {open && (
-        <>
-          <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
-          <div className="absolute top-full left-0 mt-1 z-50 w-80 max-h-80 overflow-y-auto rounded border border-border bg-card shadow-xl">
-            <div className="p-2 border-b border-border">
-              <div className="text-[10px] uppercase tracking-wider text-muted-foreground font-mono font-semibold px-2 py-1">
-                Available Incidents
-              </div>
-            </div>
-            <div className="p-1">
-              {Object.entries(grouped).map(([label, items]) => {
-                // Show the most recent item for each scene type
-                const latest = items[0];
-                if (!latest) return null;
-                const isActive = activeReport?.id === latest.id;
-                const outcomeLabel = latest.outcome === "SPILL_DETECTED" ? "✓ Spill Detected"
-                  : latest.outcome === "NO_SPILL_DETECTED" ? "✓ No Spill"
-                  : latest.outcome === "ANALYSIS_INCONCLUSIVE" ? "⚠ Inconclusive"
-                  : latest.status;
-                const modeLabel = latest.mode ?? "DEMO";
-
-                return (
-                  <button
-                    key={latest.id}
-                    type="button"
-                    onClick={() => {
-                      setActiveReportId(latest.id);
-                      setOpen(false);
-                    }}
-                    className={`w-full text-left rounded px-3 py-2 text-xs transition-colors ${
-                      isActive
-                        ? "bg-primary/10 border border-primary/30 text-foreground"
-                        : "hover:bg-secondary text-foreground"
-                    }`}
-                  >
-                    <div className="flex items-center justify-between">
-                      <span className="font-semibold">{label}</span>
-                      <span className="rounded bg-secondary px-1.5 py-0.5 text-[9px] font-mono uppercase text-muted-foreground border border-border">
-                        {modeLabel}
-                      </span>
-                    </div>
-                    <div className="flex items-center justify-between mt-1 text-[10px] text-muted-foreground">
-                      <span>{outcomeLabel}</span>
-                      <span>{latest.detectedAt.slice(0, 16).replace("T", " ")}</span>
-                    </div>
-                    {latest.sceneId && (
-                      <div className="mt-1 text-[9px] font-mono text-muted-foreground truncate opacity-70" title={latest.sceneId}>
-                        {latest.sceneId}
-                      </div>
-                    )}
-                    {items.length > 1 && (
-                      <div className="text-[9px] text-muted-foreground/70 mt-0.5">
-                        +{items.length - 1} older report{items.length > 2 ? "s" : ""}
-                      </div>
-                    )}
-                  </button>
-                );
-              })}
-              {history.length === 0 && !historyLoading && (
-                <div className="px-3 py-4 text-center text-xs text-muted-foreground">
-                  No saved reports. Generating Arabian Sea Demo…
-                </div>
-              )}
+      <DropdownMenu.Portal>
+        <DropdownMenu.Content
+          align="start"
+          sideOffset={4}
+          className="z-50 w-80 max-h-80 overflow-y-auto rounded border border-border bg-card shadow-xl om-fade om-rise"
+        >
+          <div className="p-2 border-b border-border">
+            <div className="text-[10px] uppercase tracking-wider text-muted-foreground font-mono font-semibold px-2 py-1">
+              Available Incidents
             </div>
           </div>
-        </>
-      )}
-    </div>
+          <div className="p-1">
+            {Object.entries(grouped).map(([label, items]) => {
+              // Show the most recent item for each scene type
+              const latest = items[0];
+              if (!latest) return null;
+              const isActive = activeReport?.id === latest.id;
+              const outcomeLabel =
+                latest.outcome === "SPILL_DETECTED"
+                  ? "✓ Spill Detected"
+                  : latest.outcome === "NO_SPILL_DETECTED"
+                    ? "✓ No Spill"
+                    : latest.outcome === "ANALYSIS_INCONCLUSIVE"
+                      ? "⚠ Inconclusive"
+                      : latest.status;
+              const modeLabel = latest.mode ?? "DEMO";
+
+              return (
+                <DropdownMenu.Item
+                  key={latest.id}
+                  onSelect={() => setActiveReportId(latest.id)}
+                  className={`w-full text-left rounded px-3 py-2 text-xs transition-colors cursor-default outline-none ${
+                    isActive
+                      ? "bg-primary/10 border border-primary/30 text-foreground"
+                      : "hover:bg-secondary focus:bg-secondary text-foreground"
+                  }`}
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="font-semibold">{label}</span>
+                    <span className="rounded bg-secondary px-1.5 py-0.5 text-[10px] font-mono uppercase text-muted-foreground border border-border">
+                      {modeLabel}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between mt-1 text-[11px] text-muted-foreground">
+                    <span>{outcomeLabel}</span>
+                    <span>{latest.detectedAt.slice(0, 16).replace("T", " ")}</span>
+                  </div>
+                  {latest.sceneId && (
+                    <div
+                      className="mt-1 text-[11px] font-mono text-muted-foreground truncate opacity-70"
+                      title={latest.sceneId}
+                    >
+                      {latest.sceneId}
+                    </div>
+                  )}
+                  {items.length > 1 && (
+                    <div className="text-[11px] text-muted-foreground/70 mt-0.5">
+                      +{items.length - 1} older report{items.length > 2 ? "s" : ""}
+                    </div>
+                  )}
+                </DropdownMenu.Item>
+              );
+            })}
+            {history.length === 0 && !historyLoading && (
+              <div className="px-3 py-4 text-center text-xs text-muted-foreground">
+                {historyError
+                  ? "Server unreachable"
+                  : "No saved reports. Generating Arabian Sea Demo…"}
+              </div>
+            )}
+          </div>
+        </DropdownMenu.Content>
+      </DropdownMenu.Portal>
+    </DropdownMenu.Root>
   );
 }
 
 function RootLayout() {
-  const { activeReport, autoLoading, isSwitchingIncident } = useIncident();
+  const { activeReport, autoLoading, isSwitchingIncident, historyError, refetchHistory } =
+    useIncident();
+  const [dismissError, setDismissError] = useState(false);
   const routerState = useRouterState();
   const currentPath = routerState.location.pathname;
 
@@ -269,51 +288,95 @@ function RootLayout() {
   if (isLanding) {
     return (
       <>
-        {/* Deep ocean background */}
-        <div
-          aria-hidden="true"
-          style={{
-            position: 'fixed',
-            inset: 0,
-            zIndex: -1,
-            pointerEvents: 'none',
-            background: 'linear-gradient(180deg, #02070E 0%, #041424 35%, #03101C 70%, #01060B 100%)',
-          }}
-        />
-        <div className="relative min-h-screen flex flex-col">
-          {/* Minimal landing header */}
-          <header
-            className="sticky top-0 z-40 border-b border-border"
-            style={{ backgroundColor: 'var(--header)' }}
-          >
-            <div className="mx-auto flex max-w-7xl items-center justify-between px-6 py-3">
-              <Link to="/" className="group flex items-center gap-3">
-                <div className="flex h-8 w-8 items-center justify-center rounded-md border border-[var(--primary)]/30 bg-[var(--primary)]/10 font-mono text-xs font-bold text-[var(--primary)] group-hover:bg-[var(--primary)]/15 transition-colors">
-                  OS
+        <div className="relative min-h-screen flex flex-col font-sans bg-[#070B10]">
+          {/* Overlaid, transparent landing header */}
+          <header className="absolute top-0 left-0 w-full z-40" style={{ height: "68px" }}>
+            <div className="mx-auto flex h-full max-w-[1240px] items-center justify-between px-6 lg:px-12">
+              {/* Left: Logo */}
+              <Link to="/" className="group flex items-center gap-2.5">
+                <div className="flex h-7 w-7 items-center justify-center rounded-full border-[1.5px] border-[var(--primary)] text-[var(--primary)]">
+                  <svg
+                    width="12"
+                    height="12"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2.5"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  >
+                    <path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z" />
+                  </svg>
                 </div>
-                <div className="min-w-0">
-                  <div className="text-sm font-bold tracking-[0.08em] text-foreground font-mono">
-                    O.S.I.S.
-                  </div>
-                  <div className="text-[10px] text-muted-foreground font-mono">
-                    Oil Spill Identification &amp; Source Attribution
-                  </div>
+                <div
+                  className="text-[20px] font-bold text-white tracking-tight"
+                  style={{ textShadow: "0 2px 4px rgba(0,0,0,0.8)" }}
+                >
+                  O.S.I.S.
                 </div>
               </Link>
-              <Link
-                to="/overview"
-                className="inline-flex items-center gap-2 rounded-md bg-[var(--primary)] px-4 py-2 text-xs font-mono font-semibold text-[var(--primary-foreground)] hover:opacity-90 transition-opacity"
-              >
-                Open Dashboard
-              </Link>
+
+              {/* Middle: Links */}
+              <nav className="hidden md:flex items-center gap-8">
+                <Link
+                  to="/"
+                  className="text-[13px] text-[var(--primary)] font-medium transition-colors"
+                  style={{ textShadow: "0 2px 4px rgba(0,0,0,0.6)" }}
+                >
+                  Home
+                </Link>
+                <a
+                  href="#how-it-works"
+                  className="text-[13px] text-white/80 hover:text-white transition-colors"
+                  style={{ textShadow: "0 2px 4px rgba(0,0,0,0.6)" }}
+                >
+                  How It Works
+                </a>
+                <Link
+                  to="/overview"
+                  className="text-[13px] text-white/80 hover:text-white transition-colors"
+                  style={{ textShadow: "0 2px 4px rgba(0,0,0,0.6)" }}
+                >
+                  Overview
+                </Link>
+              </nav>
+
+              {/* Right: Launch App */}
+              <div className="flex items-center gap-4">
+                <Link
+                  to="/overview"
+                  className="hidden md:inline-flex items-center justify-center gap-2 rounded-md bg-[var(--primary)] px-5 h-[36px] text-[13px] font-semibold text-[#020810] hover:brightness-110 transition-all"
+                >
+                  Launch App
+                  <ArrowRight className="h-4 w-4" />
+                </Link>
+
+                {/* Mobile Menu Button */}
+                <button
+                  className="md:hidden text-white p-2"
+                  aria-expanded="false"
+                  aria-label="Toggle menu"
+                >
+                  <svg
+                    width="24"
+                    height="24"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                  >
+                    <line x1="4" y1="12" x2="20" y2="12" />
+                    <line x1="4" y1="6" x2="20" y2="6" />
+                    <line x1="4" y1="18" x2="20" y2="18" />
+                  </svg>
+                </button>
+              </div>
             </div>
           </header>
 
           {/* Full-bleed content area for landing */}
           <main className="flex-1 w-full">
-            <div className="mx-auto max-w-7xl px-5 sm:px-6 py-0">
-              <Outlet />
-            </div>
+            <Outlet />
           </main>
         </div>
       </>
@@ -324,8 +387,38 @@ function RootLayout() {
     <>
       <div className="om-stars" aria-hidden="true" />
       <div className="relative min-h-screen flex flex-col">
+        {/* Global Error Banner */}
+        {!dismissError && historyError && (
+          <div className="bg-destructive/10 border-b border-destructive/20 px-6 py-2 text-xs font-mono text-destructive flex flex-wrap items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <AlertTriangle className="h-4 w-4" />
+              <span>
+                Backend server unreachable: {historyError.message}. Data may be stale or
+                unavailable.
+              </span>
+            </div>
+            <div className="flex items-center gap-4">
+              <button
+                onClick={() => refetchHistory()}
+                className="hover:opacity-70 transition-opacity underline underline-offset-2"
+              >
+                Retry Connection
+              </button>
+              <button
+                onClick={() => setDismissError(true)}
+                className="hover:opacity-70 transition-opacity"
+              >
+                Dismiss
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* Main Header */}
-        <header className="sticky top-0 z-40 border-b border-border" style={{ backgroundColor: 'var(--header)' }}>
+        <header
+          className="sticky top-0 z-40 border-b border-border"
+          style={{ backgroundColor: "var(--header)" }}
+        >
           <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-y-3 px-6 py-3">
             {/* Left brand */}
             <Link to="/" className="group flex items-center gap-3">
@@ -336,7 +429,7 @@ function RootLayout() {
                 <div className="text-sm font-bold tracking-[0.08em] text-foreground font-mono">
                   O.S.I.S.
                 </div>
-                <div className="text-[10px] text-muted-foreground font-mono">
+                <div className="text-[11px] text-muted-foreground font-mono">
                   Oil Spill Identification &amp; Source Attribution
                 </div>
               </div>
@@ -346,14 +439,14 @@ function RootLayout() {
             <div className="flex items-center gap-3">
               <IncidentSelector />
               {isDemo && activeReport && (
-                <span className="rounded border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 text-[9px] font-mono font-semibold uppercase tracking-wider text-amber-300">
+                <span className="rounded border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 text-[10px] font-mono font-semibold uppercase tracking-wider text-amber-300">
                   Demo
                 </span>
               )}
             </div>
 
             {/* Right: Compact status */}
-            <div className="hidden lg:flex items-center gap-2 text-[10px] font-mono text-muted-foreground">
+            <div className="hidden lg:flex items-center gap-2 text-[11px] font-mono text-muted-foreground">
               {activeReport && (
                 <OutcomeBadge outcome={activeReport.outcome ?? activeReport.status} />
               )}
@@ -361,13 +454,15 @@ function RootLayout() {
           </div>
 
           {/* Navigation Bar */}
-          <div className="border-t border-border/60 bg-[var(--background)]/40">
-            <nav className="mx-auto flex max-w-7xl items-center gap-0 px-6">
+          <div className="border-t border-border/60 bg-[var(--background)]/40 relative">
+            <nav
+              className="mx-auto flex max-w-7xl items-center gap-0 px-6 overflow-x-auto whitespace-nowrap [&::-webkit-scrollbar]:hidden"
+              style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}
+            >
+              {/* Optional fade mask for scroll indication on mobile could be added here */}
               {NAV.map((n) => {
                 const Icon = n.icon;
-                const isActive = n.exact
-                  ? currentPath === n.to
-                  : currentPath.startsWith(n.to);
+                const isActive = n.exact ? currentPath === n.to : currentPath.startsWith(n.to);
                 return (
                   <Link
                     key={n.to}
@@ -401,14 +496,16 @@ function RootLayout() {
         </main>
 
         {/* Footer */}
-        <footer className="border-t border-border/60 py-3.5 px-6 text-[11px] text-muted-foreground/80 font-mono" style={{ backgroundColor: 'var(--header)' }}>
+        <footer
+          className="border-t border-border/60 py-3.5 px-6 text-[11px] text-muted-foreground/80 font-mono"
+          style={{ backgroundColor: "var(--header)" }}
+        >
           <div className="mx-auto max-w-7xl flex flex-wrap items-center justify-between gap-3">
             <div>
               <span className="text-muted-foreground">O.S.I.S.</span>
-              <span className="text-muted-foreground/50"> · </span>
-              <span>SIH PS26143</span>
               <span className="hidden md:inline text-muted-foreground/50">
-                {" "}· Analytical evidence only, not legal attribution
+                {" "}
+                · Analytical evidence only, not legal attribution
               </span>
             </div>
             <div className="flex items-center gap-4 text-[11px]">
@@ -421,6 +518,7 @@ function RootLayout() {
           </div>
         </footer>
       </div>
+      <Toaster position="bottom-right" theme="dark" />
     </>
   );
 }

@@ -22,7 +22,7 @@ router.get('/evaluate-region', async (req, res, next) => {
     if (!req.query.region) {
       return res.status(400).json({ error: 'Missing region parameter' });
     }
-    const result = await riskService.evaluateRegionRisk(req.query.region);
+    const result = await riskService.getRegionRisk(req.query.region);
     res.json(result);
   } catch (err) {
     if (err.code === 'NOT_FOUND') {

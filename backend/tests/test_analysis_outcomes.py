@@ -167,6 +167,7 @@ class OutcomeTests(unittest.TestCase):
             "stageStatus": {"detection": {"status": "completed"}},
         }
         finalized = finalize(report, "REAL")
+        self.assertEqual(finalized["outcome"], "ANALYSIS_INCONCLUSIVE")
         self.assertIsNone(finalized["spill"])
         self.assertEqual(finalized["candidateAnomalies"], [unqualified])
 
@@ -195,6 +196,31 @@ class OutcomeTests(unittest.TestCase):
         self.assertEqual(finalized["outcome"], "SPILL_DETECTED")
         self.assertEqual(finalized["spill"], qualifying)
         self.assertEqual(finalized["candidateAnomalies"], [other_candidate])
+
+    def test_spill_detected_report_with_rejected_spill_but_qualifying_candidate(self):
+        """If report['spill'] fails the gate but a candidate passes, it should be promoted to spill."""
+        rejected_spill = {
+            "geometry": {"type": "Polygon", "coordinates": [[[74.7, 13.2], [74.7, 13.3], [74.8, 13.2], [74.7, 13.2]]]},
+            "passesOilEvidenceGate": False,
+        }
+        qualifying_candidate = {
+            "geometry": {"type": "Polygon", "coordinates": [[[75.0, 14.0], [75.0, 14.1], [75.1, 14.0], [75.0, 14.0]]]},
+            "passesOilEvidenceGate": True,
+        }
+        report = {
+            "mode": "REAL",
+            "scene": {"bbox": [74.7, 13.2, 75.1, 14.1], "pixels": []},
+            "spill": rejected_spill,
+            "candidateAnomalies": [qualifying_candidate],
+            "outcome": "SPILL_DETECTED",
+            "detector": {"outcome": "SPILL_DETECTED"},
+            "stageStatus": {"detection": {"status": "completed"}},
+        }
+        finalized = finalize(report, "REAL")
+        self.assertEqual(finalized["outcome"], "SPILL_DETECTED")
+        self.assertEqual(finalized["spill"], qualifying_candidate)
+        self.assertIn(rejected_spill, finalized["candidateAnomalies"])
+        self.assertNotIn(qualifying_candidate, finalized["candidateAnomalies"])
 
     def test_optional_ais_motion_does_not_invent_measurements(self):
         records, rejected = demo.normalize_ais([{"mmsi": "123456789", "timestamp": "2024-06-19T00:00:00Z", "latitude": 13.24, "longitude": 74.74}])

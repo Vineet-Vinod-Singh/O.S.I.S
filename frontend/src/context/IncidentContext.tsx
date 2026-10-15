@@ -1,5 +1,15 @@
-import { createContext, useContext, useState, useCallback, useMemo, useEffect, useRef, type ReactNode } from "react";
+import {
+  createContext,
+  useContext,
+  useState,
+  useCallback,
+  useMemo,
+  useEffect,
+  useRef,
+  type ReactNode,
+} from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
 import {
   getIncident,
   listIncidents,
@@ -83,10 +93,10 @@ export function IncidentProvider({ children }: { children: ReactNode }) {
       const arabianSeaSpill = historyData.find(
         (r) =>
           (r.sceneId === "demo-arabian-sea" || r.source === "synthetic_demo") &&
-          r.outcome === "SPILL_DETECTED"
+          r.outcome === "SPILL_DETECTED",
       );
       const bestDemo = historyData.find(
-        (r) => (r.mode === "DEMO" || !r.mode) && r.outcome === "SPILL_DETECTED"
+        (r) => (r.mode === "DEMO" || !r.mode) && r.outcome === "SPILL_DETECTED",
       );
       const target = arabianSeaSpill ?? bestDemo ?? historyData[0]; // fallback to most recent
       if (target) {
@@ -115,6 +125,22 @@ export function IncidentProvider({ children }: { children: ReactNode }) {
       setAutoLoading(false);
     }
   }, [fetchedReport, pendingId, queryClient]);
+
+  // Show a toast if a fetch takes longer than 2 seconds
+  useEffect(() => {
+    let timeoutId: NodeJS.Timeout;
+    if (isFetchingPending) {
+      timeoutId = setTimeout(() => {
+        toast.loading("Fetching incident data...", { id: "fetch-incident" });
+      }, 2000);
+    } else {
+      toast.dismiss("fetch-incident");
+    }
+    return () => {
+      clearTimeout(timeoutId);
+      toast.dismiss("fetch-incident");
+    };
+  }, [isFetchingPending]);
 
   const setActiveReport = useCallback(
     (report: IncidentReport) => {
@@ -160,7 +186,7 @@ export function IncidentProvider({ children }: { children: ReactNode }) {
       setActiveReport,
       setActiveReportId,
       clearActiveReport,
-      history: (historyData ?? []).filter(r => !r.sceneId?.startsWith('test_')),
+      history: (historyData ?? []).filter((r) => !r.sceneId?.startsWith("test_")),
       historyLoading,
       historyError: historyError ?? null,
       refetchHistory: () => void refetchHistory(),

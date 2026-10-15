@@ -14,6 +14,7 @@
 const express = require('express');
 const router = express.Router();
 const worker = require('../services/scene-worker.service');
+const incidentService = require('../services/incident.service');
 
 // ---------------------------------------------------------------------------
 // POST /start
@@ -38,8 +39,13 @@ router.post('/stop', (req, res) => {
 // ---------------------------------------------------------------------------
 // GET /status
 // ---------------------------------------------------------------------------
-router.get('/status', (req, res) => {
-  res.json({ ok: true, status: worker.workerStatus() });
+router.get('/status', async (req, res, next) => {
+  try {
+    const storage = await incidentService.storageStatus({ checkDatabase: true });
+    res.json({ ok: true, status: worker.workerStatus(), storage });
+  } catch (err) {
+    next(err);
+  }
 });
 
 // ---------------------------------------------------------------------------

@@ -333,7 +333,7 @@ class PreSpillRiskService {
        priority_reason = 'Moderate volume but missing baseline to confirm anomaly.';
     }
     
-    return {
+    const assessment = {
       metadata: {
         timestamp: new Date().toISOString(),
         region: regionId,
@@ -364,6 +364,100 @@ class PreSpillRiskService {
         }
       }
     };
+
+    // Do not cache/persist if weather fetch failed
+    const hasWeatherError = weather.errors && (weather.errors.marine || weather.errors.weather || weather.errors.fetch);
+    if (!hasWeatherError) {
+      try {
+        await pool.query(
+          `INSERT INTO pre_spill_region_risk (region_id, risk_data)
+           VALUES ($1, $2)
+           ON CONFLICT (region_id) 
+           DO UPDATE SET risk_data = EXCLUDED.risk_data, timestamp = NOW()`,
+          [regionId, JSON.stringify(assessment)]
+        );
+      } catch (e) {
+        console.error(`[pre-spill-risk] DB persist error for ${regionId}:`, e.message);
+      }
+    }
+
+    return assessment;
+  }
+
+  // Deduplication map for in-flight requests
+  _inFlight = new Map();
+  _timer = null;
+
+  async getRegionRisk(regionId) {
+    try {
+      // 1. Try to fetch from DB first
+      const { rows } = await pool.query(
+        `SELECT risk_data, timestamp FROM pre_spill_region_risk WHERE region_id = $1`,
+        [regionId]
+      );
+      if (rows.length > 0) {
+        const ageHours = (Date.now() - new Date(rows[0].timestamp).getTime()) / (1000 * 60 * 60);
+        // If fresher than 2 hours, return it
+        if (ageHours < 2) {
+          const data = rows[0].risk_data;
+          data.metadata = data.metadata || {};
+          data.metadata.cached = true;
+          data.metadata.age_hours = ageHours;
+          return data;
+        }
+      }
+    } catch (e) {
+      console.warn(`[pre-spill-risk] DB read error for ${regionId}:`, e.message);
+    }
+
+    // 2. Fetch or wait for in-flight fetch
+    if (this._inFlight.has(regionId)) {
+      return this._inFlight.get(regionId);
+    }
+
+    const promise = this.evaluateRegionRisk(regionId).finally(() => {
+      this._inFlight.delete(regionId);
+    });
+    this._inFlight.set(regionId, promise);
+    return promise;
+  }
+
+  startScheduler() {
+    if (this._timer) return;
+    console.log('[pre-spill-risk] Starting scheduler...');
+    
+    const run = async () => {
+      let priorityAreas = [];
+      try {
+        priorityAreas = JSON.parse(process.env.POLLER_PRIORITY_AREAS_JSON || '[]');
+      } catch (e) {}
+
+      for (const area of priorityAreas) {
+        try {
+          if (!this._inFlight.has(area.id)) {
+            const promise = this.evaluateRegionRisk(area.id).finally(() => {
+              this._inFlight.delete(area.id);
+            });
+            this._inFlight.set(area.id, promise);
+            await promise;
+          }
+        } catch (e) {
+          console.error(`[pre-spill-risk] Scheduler error for ${area.id}:`, e.message);
+        }
+      }
+    };
+    
+    // Run immediately and every 1 hour
+    run();
+    this._timer = setInterval(run, 60 * 60 * 1000);
+    if (this._timer.unref) this._timer.unref();
+  }
+
+  stopScheduler() {
+    if (this._timer) {
+      clearInterval(this._timer);
+      this._timer = null;
+    }
   }
 }
 

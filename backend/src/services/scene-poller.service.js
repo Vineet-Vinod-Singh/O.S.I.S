@@ -19,7 +19,18 @@
  */
 
 const pool = require('../config/db');
-const { searchCatalog } = require('./sentinel.service');
+const sentinelService = require('./sentinel.service');
+const incidentArchive = require('./incident-archive.service');
+
+function readConfig(names, fallback, parser = value => value) {
+  for (const name of Array.isArray(names) ? names : [names]) {
+    const value = process.env[name];
+    if (value === undefined || value === null || value === '') continue;
+    const parsed = parser(value);
+    if (parsed !== undefined && parsed !== null) return parsed;
+  }
+  return fallback;
+}
 
 // ---------------------------------------------------------------------------
 // Configuration — all values read from environment at module load time
@@ -80,18 +91,27 @@ const PRIORITY_AREAS = (() => {
 
 /** How often to poll CDSE, in milliseconds (default: 15 minutes) */
 const POLL_INTERVAL_MS = (() => {
-  const v = parseInt(process.env.POLLER_INTERVAL_MS, 10);
-  return Number.isFinite(v) && v >= 60000 ? v : 15 * 60 * 1000;
+  const v = readConfig(['OSIS_POLL_INTERVAL_MS', 'POLLER_INTERVAL_MS'], 15 * 60 * 1000, value => {
+    const parsed = parseInt(value, 10);
+    return Number.isFinite(parsed) && parsed >= 60000 ? parsed : undefined;
+  });
+  return v;
 })();
 
 /** Look-back window for the very first poll (hours). Default: 24 h */
 const INITIAL_LOOKBACK_HOURS = (() => {
-  const v = parseInt(process.env.POLLER_INITIAL_LOOKBACK_HOURS, 10);
-  return Number.isFinite(v) && v > 0 && v <= 72 ? v : 24;
+  const v = readConfig(['OSIS_INITIAL_LOOKBACK_HOURS', 'POLLER_INITIAL_LOOKBACK_HOURS'], 24, value => {
+    const parsed = parseInt(value, 10);
+    return Number.isFinite(parsed) && parsed > 0 && parsed <= 72 ? parsed : undefined;
+  });
+  return v;
 })();
 
 /** Max scenes to enqueue per CDSE polling cycle (protects DB from massive spikes) */
-const POLL_QUEUE_BATCH_SIZE = parseInt(process.env.POLL_QUEUE_BATCH_SIZE, 10) || 500;
+const POLL_QUEUE_BATCH_SIZE = readConfig(['OSIS_POLL_QUEUE_BATCH_SIZE', 'POLL_QUEUE_BATCH_SIZE'], 500, value => {
+  const parsed = parseInt(value, 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : undefined;
+});
 
 // ---------------------------------------------------------------------------
 // Module state
@@ -104,6 +124,7 @@ let _pollCount = 0;
 let _queuedTotal = 0;
 let _lastPollAt = null;
 let _lastError = null;
+let _storageStatus = null;
 
 // ---------------------------------------------------------------------------
 // Database helpers
@@ -191,6 +212,13 @@ async function pollOnce() {
   }
   _inFlight = true;
   try {
+    _storageStatus = await incidentArchive.capacityStatus({ checkDatabase: true });
+    if (!_storageStatus.accepting) {
+      _lastError = `storage_capacity:${_storageStatus.reason}`;
+      console.warn(`[poller] Discovery paused for storage capacity (${_storageStatus.reason}); checkpoint unchanged.`);
+      return;
+    }
+
     // Check queue capacity
     try {
       const { rows } = await pool.query("SELECT COUNT(*)::int AS count FROM processed_scenes WHERE status = 'queued'");
@@ -226,7 +254,21 @@ async function pollOnce() {
   let matchesCount = 0;
   let isPartial = false;
 
-  for (const area of PRIORITY_AREAS) {
+  const globalMode = readConfig(['OSIS_GLOBAL_DISCOVERY_MODE', 'GLOBAL_DISCOVERY_MODE', 'POLLER_GLOBAL_DISCOVERY_MODE'], false, value => String(value).toLowerCase() === 'true') === true;
+  let areasToPoll = [];
+  
+  if (globalMode) {
+    areasToPoll.push({
+      id: 'global_catalog',
+      bbox: null,
+      priority: 0,
+      isGlobal: true
+    });
+  } else {
+    areasToPoll = PRIORITY_AREAS;
+  }
+
+  for (const area of areasToPoll) {
     if (newScenes >= POLL_QUEUE_BATCH_SIZE) {
       isPartial = true;
       break;
@@ -252,30 +294,39 @@ async function pollOnce() {
     let regionCompleted = false;
     let regionFailed = false;
     let regionLatestAcq = null;
+    let retries = 0;
+    let forceRetry = false;
 
     do {
+      forceRetry = false;
       let catalog;
       try {
-        catalog = await searchCatalog({
+        catalog = await sentinelService.searchCatalog({
           bbox: area.bbox,
           datetime,
           collections: ['sentinel-1-grd'],
           nextRequest,
           maxPages: 1
         });
+        retries = 0; // reset on success
       } catch (err) {
+        if (err.message.includes('HTTP 401') && retries < 1) {
+            console.log(`[poller] Token expired for area ${area.id}. Retrying request safely...`);
+            retries++;
+            forceRetry = true;
+            continue;
+        }
+        
         _lastError = err.message;
         console.error(`[poller] CDSE catalog error for area ${area.id}:`, err.message);
-        if (nextRequest) {
-           console.log(`[poller] Token may be expired. Dropping nextRequest for ${area.id} to retry from page 1 next cycle.`);
-           nextRequest = null;
-        }
         regionFailed = true;
         break; 
       }
 
       const features = catalog.features || [];
-      console.log(`[poller] STAC discovered ${features.length} features for ${area.id}`);
+      if (features.length > 0) {
+          console.log(`[poller] STAC discovered ${features.length} features for ${area.id}`);
+      }
       
       for (const feature of features) {
         const sceneBbox = feature.bbox;
@@ -292,7 +343,8 @@ async function pollOnce() {
           if (!regionLatestAcq || d > regionLatestAcq) regionLatestAcq = d;
         }
 
-        const inserted = await enqueueScene(feature, area.bbox);
+        // Pass null as acquisitionBbox so the worker discovers all intersecting tiles
+        const inserted = await enqueueScene(feature, null);
         if (inserted) {
           newScenes++;
           console.log(`[poller] Queued scene: ${feature.id} for area: ${area.id}`);
@@ -304,18 +356,23 @@ async function pollOnce() {
       if (newScenes >= POLL_QUEUE_BATCH_SIZE && nextRequest) {
         break;
       }
-    } while (nextRequest);
+    } while (nextRequest || forceRetry);
 
-    if (!regionFailed && !nextRequest) {
+    if (!regionFailed && !nextRequest && !forceRetry) {
       regionCompleted = true;
     }
 
     if (regionCompleted) {
-      regionsState[area.id] = {
-        fromTime: new Date(toTime.getTime() + 1000).toISOString(),
-        toTime: null,
-        nextRequest: null
-      };
+      if (area.isGlobal) {
+          // Do not store completed global tiles to prevent state bloat
+          delete regionsState[area.id];
+      } else {
+          regionsState[area.id] = {
+            fromTime: new Date(toTime.getTime() + 1000).toISOString(),
+            toTime: null,
+            nextRequest: null
+          };
+      }
       if (regionLatestAcq) {
         if (!overallLatestAcquiredAt || regionLatestAcq > overallLatestAcquiredAt) overallLatestAcquiredAt = regionLatestAcq;
       } else {
@@ -333,13 +390,16 @@ async function pollOnce() {
 
   console.log(`[poller] Poll summary: ${validFeaturesCount} valid, ${invalidFeaturesCount} invalid, ${matchesCount} matched, ${discardedCount} discarded, ${newScenes} queued`);
 
+  const anyRegionStillPartial = Object.values(regionsState).some(region => region && (region.nextRequest || region.toTime));
+  const durablePartial = isPartial || anyRegionStillPartial;
+
   _queuedTotal += newScenes;
   _pollCount++;
   _lastError = null;
 
   await saveState({
     lastPollAt: now,
-    lastSceneAt: isPartial ? (state?.last_scene_at || null) : (overallLatestAcquiredAt || (state?.last_scene_at || null)),
+    lastSceneAt: durablePartial ? (state?.last_scene_at || null) : (overallLatestAcquiredAt || (state?.last_scene_at || null)),
     pollCount: (state?.poll_count || 0) + 1,
     scenesQueued: (state?.scenes_queued || 0) + newScenes,
     regionsState
@@ -408,6 +468,7 @@ function status() {
     lastPollAt: _lastPollAt,
     lastError: _lastError,
     inFlight: _inFlight,
+    storage: _storageStatus,
     config: {
       priorityAreas: PRIORITY_AREAS.map(a => a.id),
       intervalMs: POLL_INTERVAL_MS,

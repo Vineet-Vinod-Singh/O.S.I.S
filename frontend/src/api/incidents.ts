@@ -72,7 +72,14 @@ export interface IncidentSummary {
 
 /** Derive a human-readable incident name from a report or summary. */
 export function getIncidentLabel(
-  item: { mode?: string; sceneId?: string; source?: string; outcome?: string; id?: string; scene?: { id?: string; source?: string } } | null,
+  item: {
+    mode?: string;
+    sceneId?: string;
+    source?: string;
+    outcome?: string;
+    id?: string;
+    scene?: { id?: string; source?: string };
+  } | null,
 ): string {
   if (!item) return "No incident selected";
   const sceneId = (item.sceneId ?? item.scene?.id ?? "").toLowerCase();
@@ -96,7 +103,20 @@ export function getIncidentLabel(
       const sat = `Sentinel-1${s1Match[1].toUpperCase()}`;
       if (dateMatch) {
         const [_, yyyy, mm, dd, hh, min] = dateMatch;
-        const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+        const months = [
+          "Jan",
+          "Feb",
+          "Mar",
+          "Apr",
+          "May",
+          "Jun",
+          "Jul",
+          "Aug",
+          "Sep",
+          "Oct",
+          "Nov",
+          "Dec",
+        ];
         const month = months[parseInt(mm, 10) - 1];
         return `${sat} · ${dd} ${month} ${yyyy} ${hh}:${min} UTC`;
       }

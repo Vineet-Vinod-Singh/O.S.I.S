@@ -7,6 +7,8 @@ const path = require('node:path');
 const archivedScenes = require('../../data/real-scenes.json');
 const limits = require('./resource-limits');
 const sarInput = require('./sar-input.service');
+const incidentArchive = require('./incident-archive.service');
+const objectStorage = require('./object-storage.service');
 
 const directory = () =>
     process.env.OSIS_REPORT_DIR ||
@@ -120,25 +122,63 @@ function runPipeline(input) {
     });
 }
 
-async function save(report) {
+async function save(report, evidencePaths = {}) {
     saves++;
     let temporary;
     try {
         await fs.mkdir(directory(), { recursive: true });
+        const destination = path.join(directory(), `${report.id}.json`);
+        const existingPath = await fs.access(destination).then(() => true).catch(error => {
+            if (error.code === 'ENOENT') return false;
+            throw error;
+        });
+        if (existingPath) {
+            const existing = await fs.readFile(destination);
+            const current = Buffer.from(JSON.stringify(report));
+            if (existing.equals(current)) return 'local_json';
+            if (report.persistence?.database === 'mirrored') {
+                await incidentArchive.archiveReport(report, {
+                    databasePersisted: true,
+                    reportDirectory: directory(),
+                    sourceReportPath: destination,
+                    evidencePaths,
+                });
+                return 'verified_archive';
+            }
+            throw Object.assign(new Error('Incident ID already exists with different report content'), {
+                status: 409,
+                code: 'OSIS_REPORT_ID_CONFLICT',
+            });
+        }
         const files = (await fs.readdir(directory())).filter(
             (f) => f.endsWith('.json') && validId(f.slice(0, -5)),
         );
-        if (files.length + saves > limits.maxReports)
+        if (files.length + saves > limits.maxReports) {
+            const existingCount = files.length;
+            if (process.env.OSIS_PERSIST_POSTGRES === 'true') {
+                await incidentArchive.archiveReport(report, {
+                    databasePersisted: report.persistence?.database === 'mirrored',
+                    reportDirectory: directory(),
+                    sourceReportPath: path.join(directory(), `${report.id}.json`),
+                    evidencePaths,
+                });
+                return 'verified_archive';
+            }
             throw Object.assign(
                 new Error(
-                    'Local report archive limit reached. Export and remove old reports before retrying.',
+                    `Local report capacity reached (${existingCount}/${limits.maxReports}); archive and PostgreSQL persistence are required before processing can resume.`,
                 ),
-                { status: 507 },
+                {
+                    status: 507,
+                    code: 'OSIS_STORAGE_CAPACITY',
+                    storageReason: 'report_capacity',
+                },
             );
-        const destination = path.join(directory(), `${report.id}.json`);
+        }
         temporary = `${destination}.tmp`;
         await fs.writeFile(temporary, JSON.stringify(report), { flag: 'wx' });
         await fs.rename(temporary, destination);
+        return 'local_json';
     } finally {
         saves--;
         if (temporary) await fs.rm(temporary, { force: true });
@@ -224,6 +264,21 @@ async function analyze(input = {}, trusted = null) {
         throw Object.assign(new Error('onDemand is a REAL boolean option'), {
             status: 400,
         });
+    const admission = await incidentArchive.capacityStatus({
+        checkDatabase: mode === 'REAL' && trusted !== null,
+    });
+    if (!admission.accepting) {
+        throw Object.assign(
+            new Error(
+                `Processing paused for storage capacity (${admission.reason}); preserve the durable queue and follow the storage recovery procedure.`,
+            ),
+            {
+                status: 507,
+                code: 'OSIS_STORAGE_CAPACITY',
+                storageReason: admission.reason,
+            },
+        );
+    }
     if (active >= limits.analyses)
         throw Object.assign(
             new Error('Analysis capacity reached; retry shortly'),
@@ -315,6 +370,7 @@ async function analyze(input = {}, trusted = null) {
             processedAt: new Date().toISOString(),
             persistence: { local: 'durable_json', database: 'disabled' },
         };
+        const evidencePaths = trusted?._paths || {};
         if (process.env.OSIS_PERSIST_POSTGRES === 'true') {
             try {
                 const pool = require('../config/db');
@@ -346,16 +402,59 @@ async function analyze(input = {}, trusted = null) {
                 );
                 if (pgResult.rows.length > 0) {
                     report.id = pgResult.rows[0].id;
+                    await pool.query(
+                        'UPDATE osis_incidents SET report = $2::jsonb WHERE id = $1',
+                        [report.id, JSON.stringify(report)],
+                    );
                 }
             } catch (err) {
-                console.error(`[incident ${id}] Database Error:`, err);
+                if ((mode === 'REAL' && trusted) || objectStorage.isCloudMode()) {
+                    throw Object.assign(
+                        new Error('PostgreSQL persistence failed; scene remains queued for retry.'),
+                        {
+                            status: 503,
+                            code: 'OSIS_STORAGE_CAPACITY',
+                            storageReason: 'database_unavailable',
+                        },
+                    );
+                }
+                console.error(
+                    `[incident ${id}] Database persistence error:`,
+                    String(err.code || err.name || 'database error'),
+                );
                 report.persistence.database = 'unavailable_local_fallback';
                 console.warn(
                     `[incident ${id}] database mirror unavailable; retaining local report`,
                 );
             }
         }
-        await save(report);
+        if (objectStorage.isCloudMode()) {
+            try {
+                await objectStorage.persistReportArtifacts(
+                    report,
+                    evidencePaths,
+                    { processedSceneId: trusted?._processedSceneId },
+                );
+            } catch (storageError) {
+                try {
+                    await save(report, evidencePaths);
+                } catch (localError) {
+                    const failure = new AggregateError(
+                        [storageError, localError],
+                        'Cloud storage failed and the local report could not be saved',
+                        { cause: storageError },
+                    );
+                    Object.assign(failure, {
+                        code: 'OSIS_STORAGE_CAPACITY',
+                        status: 503,
+                        storageReason: storageError.storageReason || 'object_storage_upload',
+                    });
+                    throw failure;
+                }
+                throw storageError;
+            }
+        }
+        await save(report, evidencePaths);
         console.info(
             `[incident ${id}] ${report.status}; ${report.stages?.length || 0} stages`,
         );
@@ -368,12 +467,16 @@ async function analyze(input = {}, trusted = null) {
 async function get(id) {
     if (!validId(id))
         throw Object.assign(new Error('Invalid incident ID'), { status: 400 });
+    const archived = await incidentArchive.readVerifiedArchiveReport(id);
+    if (archived) return archived;
     try {
         return JSON.parse(
             await fs.readFile(path.join(directory(), `${id}.json`), 'utf8'),
         );
     } catch (error) {
         if (error.code === 'ENOENT') {
+            const legacyArchived = await incidentArchive.readLegacyArchiveReport(id);
+            if (legacyArchived) return legacyArchived;
             try {
                 return JSON.parse(
                     await fs.readFile(
@@ -405,14 +508,61 @@ async function list() {
     const seenSceneIds = new Set();
 
     for (const file of files
-        .filter((f) => f.endsWith('.json') && validId(f.slice(0, -5)))
-        .slice(0, limits.maxReports)) {
+        .filter((f) => f.endsWith('.json') && validId(f.slice(0, -5)))) {
         let r;
         try {
             r = await get(file.slice(0, -5));
         } catch {
             continue;
         } // One corrupt archive must not blank history.
+        seenIds.add(r.id);
+        if (r.scene?.id) seenSceneIds.add(r.scene.id);
+        reports.push({
+            id: r.id,
+            detectedAt: r.detectedAt,
+            sceneId: r.scene.id,
+            acquiredAt: r.scene.acquiredAt,
+            status: r.status,
+            outcome: r.outcome,
+            forecastHours: r.forecastHours,
+            leadingCandidate: r.leadingCandidate || null,
+            source: r.scene.source,
+            mode: r.mode || 'DEMO',
+        });
+    }
+
+    const archivedReports = await incidentArchive.listVerifiedArchiveReports();
+    for (const r of archivedReports) {
+        if (seenIds.has(r.id) || (r.scene?.id && seenSceneIds.has(r.scene.id))) continue;
+        seenIds.add(r.id);
+        if (r.scene?.id) seenSceneIds.add(r.scene.id);
+        reports.push({
+            id: r.id,
+            detectedAt: r.detectedAt,
+            sceneId: r.scene.id,
+            acquiredAt: r.scene.acquiredAt,
+            status: r.status,
+            outcome: r.outcome,
+            forecastHours: r.forecastHours,
+            leadingCandidate: r.leadingCandidate || null,
+            source: r.scene.source,
+            mode: r.mode || 'DEMO',
+        });
+    }
+
+    let legacyArchiveFiles = [];
+    try {
+        legacyArchiveFiles = await fs.readdir(incidentArchive.archiveDirectory());
+    } catch (error) {
+        if (error.code !== 'ENOENT') throw error;
+    }
+    for (const file of legacyArchiveFiles.filter(
+        f => f.endsWith('.json') && validId(f.slice(0, -5)),
+    )) {
+        const id = file.slice(0, -5);
+        if (seenIds.has(id)) continue;
+        const r = await incidentArchive.readLegacyArchiveReport(id);
+        if (!r || (r.scene?.id && seenSceneIds.has(r.scene.id))) continue;
         seenIds.add(r.id);
         if (r.scene?.id) seenSceneIds.add(r.scene.id);
         reports.push({
@@ -492,8 +642,9 @@ const scenes = () => [
 
 async function analyzeUpload(body, metadata) {
     const prepared = await sarInput.upload(body, metadata);
+    let success = false;
     try {
-        return await analyze(
+        const report = await analyze(
             {
                 mode: 'UPLOAD',
                 detector: 'hybrid',
@@ -502,9 +653,18 @@ async function analyzeUpload(body, metadata) {
             },
             prepared,
         );
+        success = true;
+        return report;
     } finally {
-        await prepared.cleanup();
+        await prepared.cleanup({ success });
     }
 }
 
-module.exports = { analyze, analyzeUpload, get, list, scenes };
+module.exports = {
+    analyze,
+    analyzeUpload,
+    get,
+    list,
+    scenes,
+    storageStatus: options => incidentArchive.capacityStatus(options),
+};

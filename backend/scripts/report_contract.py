@@ -42,12 +42,25 @@ def finalize(report, mode):
         report["spill"] = None
     elif outcome == "SPILL_DETECTED":
         spill = report.get("spill")
-        if not demo and spill is not None and not spill.get("passesOilEvidenceGate"):
-            candidate_anomalies = report.get("candidateAnomalies") or []
-            if spill not in candidate_anomalies:
-                candidate_anomalies.insert(0, spill)
+        candidate_anomalies = report.get("candidateAnomalies") or []
+        
+        if not demo:
+            if spill is not None and not spill.get("passesOilEvidenceGate"):
+                if spill not in candidate_anomalies:
+                    candidate_anomalies.insert(0, spill)
+                spill = None
+            
+            if spill is None:
+                passing_candidate = next((d for d in candidate_anomalies if d.get("passesOilEvidenceGate")), None)
+                if passing_candidate:
+                    spill = passing_candidate
+                    candidate_anomalies.remove(passing_candidate)
+                else:
+                    outcome = "ANALYSIS_INCONCLUSIVE"
+                    report["outcome"] = outcome
+            
+            report["spill"] = spill
             report["candidateAnomalies"] = candidate_anomalies
-            report["spill"] = None
     messages = {
         "SPILL_DETECTED": "Oil-like slick detected; analytical candidate, not laboratory confirmation of oil.",
         "NO_SPILL_DETECTED": "Analysis completed: no significant oil-like anomaly detected. This is not proof of clean water.",

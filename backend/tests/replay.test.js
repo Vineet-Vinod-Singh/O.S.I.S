@@ -96,6 +96,7 @@ test('replay 200 resets Karnataka scene to queued (explicit sceneId)', async () 
   assert.equal(r.body.scene.scene_id, 'test_s1a_karnataka_day3_ml_001');
   assert.equal(r.body.scene.status, 'queued');
   assert.equal(r.body.scene.incident_id, null);
+  assert.equal(r.body.scene.incident_ids, null);
   assert.equal(r.body.scene.error_message, null);
   assert.equal(r.body.scene.retry_count, 0);
   assert.ok(r.body.message);

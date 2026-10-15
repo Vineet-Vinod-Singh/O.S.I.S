@@ -114,7 +114,8 @@ router.get('/queue', async (req, res, next) => {
       `SELECT id, scene_id, collection, bbox, acquired_at, platform,
               orbit_direction, polarization, status,
               queued_at, processing_at, completed_at,
-              error_message, retry_count, incident_id
+              error_message, retry_count, incident_id,
+              artifact_metadata->'incident_ids' AS incident_ids
          FROM processed_scenes
          ${whereClause}
          ORDER BY queued_at DESC
@@ -147,7 +148,8 @@ router.get('/queue/:sceneId', async (req, res, next) => {
       `SELECT id, scene_id, collection, bbox, acquired_at, platform,
               orbit_direction, polarization, status,
               queued_at, processing_at, completed_at,
-              error_message, retry_count, incident_id, stac_feature
+              error_message, retry_count, incident_id, stac_feature,
+              artifact_metadata->'incident_ids' AS incident_ids
          FROM processed_scenes
         WHERE scene_id = $1
         LIMIT 1`,
@@ -195,12 +197,17 @@ router.post('/replay', async (req, res, next) => {
               processing_at = NULL,
               error_message = NULL,
               retry_count   = 0,
-              queued_at     = NOW()
+              queued_at     = NOW(),
+              artifact_metadata = CASE
+                  WHEN artifact_metadata IS NOT NULL THEN artifact_metadata - 'incident_ids'
+                  ELSE NULL
+              END
         WHERE scene_id = $1
         RETURNING id, scene_id, collection, bbox, acquired_at, platform,
                   orbit_direction, polarization, status,
                   queued_at, processing_at, completed_at,
-                  error_message, retry_count, incident_id`,
+                  error_message, retry_count, incident_id,
+                  artifact_metadata->'incident_ids' AS incident_ids`,
       [sceneId]
     );
 

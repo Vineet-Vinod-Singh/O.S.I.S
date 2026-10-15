@@ -5,6 +5,22 @@ const { describe, it, beforeEach, afterEach, mock } = require('node:test');
 const assert = require('node:assert');
 const retention = require('../src/services/retention.service');
 
+async function writeMarker(directory, values = {}) {
+    await fs.writeFile(
+        path.join(directory, 'osis-cache.json'),
+        JSON.stringify({
+            owner: 'osis-test-v1',
+            directory: path.resolve(directory),
+            state: 'completed',
+            persistenceSucceeded: true,
+            evidenceRequired: false,
+            evidenceArchived: false,
+            expires: Date.now() - 3600000,
+            ...values,
+        }),
+    );
+}
+
 describe('Retention Service', () => {
     let testDir;
 
@@ -20,12 +36,7 @@ describe('Retention Service', () => {
         const artifactDir = path.join(testDir, 'osis-expired');
         await fs.mkdir(artifactDir);
         
-        // Create an expired marker (1 hour in the past)
-        const expiredTime = Date.now() - 3600000;
-        await fs.writeFile(
-            path.join(artifactDir, 'osis-cache.json'),
-            JSON.stringify({ owner: 'osis-test-v1', expires: expiredTime })
-        );
+        await writeMarker(artifactDir);
 
         // Add dummy artifact file
         await fs.writeFile(path.join(artifactDir, 'data.tif'), 'fake data');
@@ -44,12 +55,7 @@ describe('Retention Service', () => {
         const artifactDir = path.join(testDir, 'osis-active');
         await fs.mkdir(artifactDir);
         
-        // Create an active marker (1 hour in the future)
-        const activeTime = Date.now() + 3600000;
-        await fs.writeFile(
-            path.join(artifactDir, 'osis-cache.json'),
-            JSON.stringify({ owner: 'osis-test-v1', expires: activeTime })
-        );
+        await writeMarker(artifactDir, { expires: Date.now() + 3600000 });
 
         const result = await retention.cleanupStaleArtifacts(testDir, 'osis-');
         
@@ -85,16 +91,13 @@ describe('Retention Service', () => {
         const artifactDir = path.join(testDir, 'osis-dryrun');
         await fs.mkdir(artifactDir);
         
-        const expiredTime = Date.now() - 3600000;
-        await fs.writeFile(
-            path.join(artifactDir, 'osis-cache.json'),
-            JSON.stringify({ owner: 'osis-test-v1', expires: expiredTime })
-        );
+        await writeMarker(artifactDir);
 
         const result = await retention.cleanupStaleArtifacts(testDir, 'osis-', { dryRun: true });
         
         assert.strictEqual(result.scanned, 1);
-        assert.strictEqual(result.deleted, 1); // logical deletions
+        assert.strictEqual(result.deleted, 0);
+        assert.strictEqual(result.wouldDelete, 1);
 
         const exists = await fs.access(artifactDir).then(() => true).catch(() => false);
         assert.strictEqual(exists, true); // but actually still exists!
@@ -105,11 +108,7 @@ describe('Retention Service', () => {
         await fs.mkdir(artifactDir);
         
         // Create an expired marker
-        const expiredTime = Date.now() - 3600000;
-        await fs.writeFile(
-            path.join(artifactDir, 'osis-cache.json'),
-            JSON.stringify({ owner: 'osis-test-v1', expires: expiredTime })
-        );
+        await writeMarker(artifactDir);
 
         retention.registerActiveDirectory(artifactDir);
 
@@ -128,12 +127,7 @@ describe('Retention Service', () => {
         const artifactDir = path.join(testDir, 'osis-scheduled');
         await fs.mkdir(artifactDir);
         
-        // Create an expired marker
-        const expiredTime = Date.now() - 3600000;
-        await fs.writeFile(
-            path.join(artifactDir, 'osis-cache.json'),
-            JSON.stringify({ owner: 'osis-test-v1', expires: expiredTime })
-        );
+        await writeMarker(artifactDir, { expires: Date.now() - 3600000 });
 
         // Schedule cleanup
         retention.scheduleCleanup(testDir, 'osis-');
@@ -150,5 +144,50 @@ describe('Retention Service', () => {
         // Verify directory was deleted by the background task
         const exists = await fs.access(artifactDir).then(() => true).catch(() => false);
         assert.strictEqual(exists, false);
+    });
+
+    it('retains failed artifacts until the diagnostic period expires', async () => {
+        const artifactDir = path.join(testDir, 'osis-failed');
+        await fs.mkdir(artifactDir);
+        await writeMarker(artifactDir, {
+            state: 'failed',
+            persistenceSucceeded: false,
+            evidenceRequired: false,
+            expires: Date.now() + 3600000,
+        });
+
+        const beforeExpiry = await retention.cleanupStaleArtifacts(testDir, 'osis-');
+        assert.equal(beforeExpiry.deleted, 0);
+        assert.equal(beforeExpiry.skipped, 1);
+
+        await writeMarker(artifactDir, {
+            state: 'failed',
+            persistenceSucceeded: false,
+            evidenceRequired: false,
+            expires: Date.now() - 3600000,
+        });
+        const afterExpiry = await retention.cleanupStaleArtifacts(testDir, 'osis-');
+        assert.equal(afterExpiry.deleted, 1);
+    });
+
+    it('never deletes evidence until durable archival is verified', async () => {
+        const artifactDir = path.join(testDir, 'osis-evidence');
+        await fs.mkdir(artifactDir);
+        await fs.writeFile(path.join(artifactDir, 'scene.tif'), 'evidence');
+        await writeMarker(artifactDir, {
+            evidenceRequired: true,
+            evidenceArchived: false,
+        });
+
+        const blocked = await retention.cleanupStaleArtifacts(testDir, 'osis-');
+        assert.equal(blocked.deleted, 0);
+        await fs.access(path.join(artifactDir, 'scene.tif'));
+
+        await writeMarker(artifactDir, {
+            evidenceRequired: true,
+            evidenceArchived: true,
+        });
+        const archived = await retention.cleanupStaleArtifacts(testDir, 'osis-');
+        assert.equal(archived.deleted, 1);
     });
 });

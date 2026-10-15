@@ -66,6 +66,14 @@ async function getAccessToken() {
   return cachedToken;
 }
 
+function sleep(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+function getRetryDelay(attempt) {
+  return Math.min(1000 * (2 ** attempt), 15000);
+}
+
 const STAC_PAGE_SIZE = parseInt(process.env.STAC_PAGE_SIZE, 10) || 50;
 const STAC_MAX_PAGES = parseInt(process.env.STAC_MAX_PAGES, 10) || 10;
 
@@ -94,10 +102,10 @@ async function searchCatalog({
   const actualLimit = Math.min(Math.max(1, limit), 500);
   let baseBody = {
     collections,
-    bbox,
     datetime,
     limit: actualLimit,
   };
+  if (bbox) baseBody.bbox = bbox;
   let currentBody;
 
   if (nextRequest) {
@@ -121,7 +129,7 @@ async function searchCatalog({
     const duration = Date.parse(to) - Date.parse(from);
     if (!Number.isFinite(duration) || duration < 0 || duration > 86400000) throw new Error('Search interval must be at most 24 hours');
 
-    if (bbox !== undefined) {
+    if (bbox) {
       if (!Array.isArray(bbox) || bbox.length !== 4 || !bbox.every(Number.isFinite) ||
           !(bbox[0] >= -180 && bbox[2] <= 180 && bbox[1] >= -90 && bbox[3] <= 90 &&
             bbox[2] > bbox[0] && bbox[3] > bbox[1])) {
@@ -135,9 +143,26 @@ async function searchCatalog({
   const allFeatures = [];
   let pagesFetched = 0;
   let nextLink = null;
+  let retryAttempts = 0;
 
   while (pagesFetched < maxPages) {
-    const token = await getAccessToken();
+    let token;
+    try {
+      token = await getAccessToken();
+    } catch (err) {
+      const statusMatch = /HTTP (\d+)/.exec(err.message || '');
+      const statusCode = statusMatch ? Number(statusMatch[1]) : null;
+      if ((statusCode === 401 || statusCode === 429) && retryAttempts < 3) {
+        const waitMs = getRetryDelay(retryAttempts);
+        retryAttempts += 1;
+        console.warn(`[sentinel] Retrying catalog auth after ${statusCode || 'network'} failure in ${waitMs}ms`);
+        await sleep(waitMs);
+        cachedToken = null;
+        tokenExpiresAt = 0;
+        continue;
+      }
+      throw err;
+    }
     
     const fetchOptions = {
       method: currentMethod,
@@ -148,7 +173,27 @@ async function searchCatalog({
     }
 
     console.log('Sending request to:', currentUrl, 'with method:', currentMethod);
-    const response = await fetch(currentUrl, fetchOptions);
+    let response;
+    try {
+      response = await fetch(currentUrl, fetchOptions);
+    } catch (err) {
+      const statusMatch = /HTTP (\d+)/.exec(err.message || '');
+      const statusCode = statusMatch ? Number(statusMatch[1]) : null;
+      if ((statusCode === 401 || statusCode === 429) && retryAttempts < 3) {
+        cachedToken = null;
+        tokenExpiresAt = 0;
+        const waitMs = getRetryDelay(retryAttempts);
+        retryAttempts += 1;
+        console.warn(`[sentinel] CDSE request failed (${statusCode || 'network'}), retrying in ${waitMs}ms`);
+        await sleep(waitMs);
+        continue;
+      }
+      if (err.message && err.message.includes('HTTP 401')) {
+        cachedToken = null;
+        tokenExpiresAt = 0;
+      }
+      throw err;
+    }
     const data = await response.json();
 
     if (data.features && Array.isArray(data.features)) {
@@ -156,6 +201,7 @@ async function searchCatalog({
     }
 
     pagesFetched++;
+    retryAttempts = 0;
 
     nextLink = (data.links || []).find(l => l.rel === 'next');
     if (!nextLink) break;

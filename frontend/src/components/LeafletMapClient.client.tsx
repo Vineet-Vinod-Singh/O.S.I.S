@@ -17,6 +17,7 @@ import {
 } from "react-leaflet";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
+import { Plus, Minus, Target } from "lucide-react";
 
 export const DEFAULT_TILE_URL = "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png";
 export const DEFAULT_TILE_ATTRIBUTION =
@@ -148,7 +149,7 @@ function MapControlsOverlay({
             onClick={() => map.zoomIn()}
             title="Zoom In"
           >
-            +
+            <Plus className="h-4 w-4" />
           </button>
           <button
             type="button"
@@ -157,7 +158,7 @@ function MapControlsOverlay({
             onClick={() => map.zoomOut()}
             title="Zoom Out"
           >
-            −
+            <Minus className="h-4 w-4" />
           </button>
           <button
             type="button"
@@ -166,7 +167,7 @@ function MapControlsOverlay({
             onClick={() => map.setView(initialCenter, initialZoom)}
             title="Reset View"
           >
-            ⤾
+            <Target className="h-4 w-4" />
           </button>
         </div>
       </div>
@@ -184,9 +185,7 @@ function MapStatusFooter() {
   useMapEvents({
     zoomend: () => setZoom(map.getZoom()),
     mousemove: (e) => {
-      setCursorCoords(
-        `${e.latlng.lat.toFixed(2)}°N, ${e.latlng.lng.toFixed(2)}°E`
-      );
+      setCursorCoords(`${e.latlng.lat.toFixed(2)}°N, ${e.latlng.lng.toFixed(2)}°E`);
     },
     mouseout: () => setCursorCoords(null),
   });
@@ -194,7 +193,8 @@ function MapStatusFooter() {
   return (
     <div className="flex items-end justify-between text-[11px] text-muted-foreground font-mono">
       <span className="pointer-events-auto rounded bg-card/95 px-2 py-0.5 border border-border">
-        Arabian Sea Sector {cursorCoords ? `· Cursor: ${cursorCoords}` : "· Drag to pan · Scroll to zoom"}
+        Arabian Sea Sector{" "}
+        {cursorCoords ? `· Cursor: ${cursorCoords}` : "· Drag to pan · Scroll to zoom"}
       </span>
       <span className="pointer-events-auto rounded bg-card/95 px-2 py-0.5 tabular-nums border border-border text-[var(--accent-blue)]">
         ZOOM {zoom}
@@ -218,14 +218,8 @@ export function LeafletMapClient({
   className = "",
 }: LeafletMapProps) {
   const targetCenter = center ?? initialCenter;
-  const normCenter = useMemo(
-    () => normalizeLatLng(targetCenter),
-    [targetCenter]
-  );
-  const normZoom = useMemo(
-    () => normalizeZoom(initialZoom),
-    [initialZoom]
-  );
+  const normCenter = useMemo(() => normalizeLatLng(targetCenter), [targetCenter]);
+  const normZoom = useMemo(() => normalizeZoom(initialZoom), [initialZoom]);
 
   return (
     <div
@@ -240,17 +234,9 @@ export function LeafletMapClient({
         className="h-full w-full osis-leaflet-map"
         style={{ height: "100%", width: "100%", background: "var(--map-bg)" }}
       >
-        <TileLayer
-          url={tileUrl}
-          attribution={tileAttribution}
-          maxZoom={18}
-        />
+        <TileLayer url={tileUrl} attribution={tileAttribution} maxZoom={18} />
         <MapViewController center={normCenter} zoom={normZoom} bounds={bounds} />
-        <MapControlsOverlay
-          initialCenter={normCenter}
-          initialZoom={normZoom}
-          legend={legend}
-        />
+        <MapControlsOverlay initialCenter={normCenter} initialZoom={normZoom} legend={legend} />
         {children}
       </MapContainer>
     </div>
@@ -292,7 +278,7 @@ export function MapMarker({
 
   const icon = useMemo(
     () => createTacticalIcon({ color, label, active, pulse }),
-    [color, label, active, pulse]
+    [color, label, active, pulse],
   );
 
   const markerProps: any = {
@@ -318,8 +304,8 @@ export function MapGeoJSON({
   onEachFeature?: ((feature: any, layer: L.Layer) => void) | undefined;
   [key: string]: any;
 }) {
-  if (!data) return null;
-  const key = useMemo(() => {
+  const geoKey = useMemo(() => {
+    if (!data) return "empty";
     try {
       return JSON.stringify(data.geometry || data);
     } catch {
@@ -327,11 +313,13 @@ export function MapGeoJSON({
     }
   }, [data]);
 
-  const props: any = { key, data, ...rest };
+  if (!data) return null;
+
+  const props: any = { data, ...rest };
   if (style !== undefined) props.style = style;
   if (onEachFeature !== undefined) props.onEachFeature = onEachFeature;
 
-  return <GeoJSON {...props} />;
+  return <GeoJSON key={geoKey} {...props} />;
 }
 
 export function MapPolyline({

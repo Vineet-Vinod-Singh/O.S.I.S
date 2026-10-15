@@ -26,9 +26,17 @@ const emptyScene = (mode, acquiredAt = '') => ({
 async function upload(body, metadata) {
     const scene = emptyScene('UPLOAD');
     let directory;
-    const cleanup = async () => {
+    const cleanup = async ({ success = false } = {}) => {
         if (directory) retention.unregisterActiveDirectory(directory);
-        // Active retention lifecycle replaces immediate cleanup
+        if (directory) {
+            await retention.updateArtifactState(directory, {
+                state: success ? 'completed' : 'failed',
+                persistenceSucceeded: success,
+                evidenceRequired: true,
+                evidenceArchived: false,
+                ...(success ? {} : { retentionHours: limits.failedArtifactRetentionHours }),
+            });
+        }
     };
     try {
         if (!metadata || Buffer.byteLength(metadata) > 4096)
@@ -153,7 +161,7 @@ async function upload(body, metadata) {
             cleanup,
         };
     } catch (error) {
-        await cleanup();
+        if (directory) await cleanup({ success: false });
         return {
             _scene: scene,
             _unavailable:
@@ -180,7 +188,15 @@ async function onDemand(entry) {
     };
     if (cache && cache.expires <= Date.now()) {
         if (cache.directory) retention.unregisterActiveDirectory(cache.directory);
-        await fs.rm(cache.directory, { recursive: true, force: true });
+        if (cache.directory) {
+            await retention.updateArtifactState(cache.directory, {
+                state: 'expired',
+                persistenceSucceeded: false,
+                evidenceRequired: true,
+                evidenceArchived: false,
+                retentionHours: limits.failedArtifactRetentionHours,
+            });
+        }
         cache = null;
     }
     if (cache?.id === entry.id) {
@@ -190,7 +206,15 @@ async function onDemand(entry) {
             return { _scene: cache.scene, _paths: cache.paths };
         } catch {
             if (cache.directory) retention.unregisterActiveDirectory(cache.directory);
-            await fs.rm(cache.directory, { recursive: true, force: true });
+            if (cache.directory) {
+                await retention.updateArtifactState(cache.directory, {
+                    state: 'failed',
+                    persistenceSucceeded: false,
+                    evidenceRequired: true,
+                    evidenceArchived: false,
+                    retentionHours: limits.failedArtifactRetentionHours,
+                });
+            }
             cache = null;
         }
     }
@@ -271,7 +295,13 @@ async function onDemand(entry) {
     } catch {
         if (directory) {
             retention.unregisterActiveDirectory(directory);
-            await fs.rm(directory, { recursive: true, force: true });
+            await retention.updateArtifactState(directory, {
+                state: 'failed',
+                persistenceSucceeded: false,
+                evidenceRequired: true,
+                evidenceArchived: false,
+                retentionHours: limits.failedArtifactRetentionHours,
+            });
         }
         return {
             _scene: scene,

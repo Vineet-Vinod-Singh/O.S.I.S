@@ -32,6 +32,16 @@ const incidentService = require('./incident.service');
 const poller = require('./scene-poller.service');
 const retention = require('./retention.service');
 
+function readConfig(names, fallback, parser = value => value) {
+  for (const name of Array.isArray(names) ? names : [names]) {
+    const value = process.env[name];
+    if (value === undefined || value === null || value === '') continue;
+    const parsed = parser(value);
+    if (parsed !== undefined && parsed !== null) return parsed;
+  }
+  return fallback;
+}
+
 // ---------------------------------------------------------------------------
 // Configuration
 // ---------------------------------------------------------------------------
@@ -48,8 +58,11 @@ const SCENES_DIR = (() => {
 
 /** Worker polling interval in milliseconds. Default: 30 seconds. */
 const WORKER_INTERVAL_MS = (() => {
-  const v = parseInt(process.env.OSIS_WORKER_INTERVAL_MS, 10);
-  return Number.isFinite(v) && v >= 5000 ? v : 30000;
+  const v = readConfig(['OSIS_WORKER_INTERVAL_MS', 'WORKER_INTERVAL_MS'], 30000, value => {
+    const parsed = parseInt(value, 10);
+    return Number.isFinite(parsed) && parsed >= 5000 ? parsed : undefined;
+  });
+  return v;
 })();
 
 /**
@@ -58,8 +71,11 @@ const WORKER_INTERVAL_MS = (() => {
  * Must be longer than the longest realistic download time.
  */
 const STALE_MS = (() => {
-  const v = parseInt(process.env.OSIS_WORKER_STALE_MS, 10);
-  return Number.isFinite(v) && v >= 60000 ? v : 10 * 60 * 1000;
+  const v = readConfig(['OSIS_WORKER_STALE_MS', 'WORKER_STALE_MS'], 10 * 60 * 1000, value => {
+    const parsed = parseInt(value, 10);
+    return Number.isFinite(parsed) && parsed >= 60000 ? parsed : undefined;
+  });
+  return v;
 })();
 
 /** Unique ID for this worker instance (helps multi-worker debugging). */
@@ -76,6 +92,46 @@ let _processedCount = 0;
 let _failedCount = 0;
 let _lastActivity = null;
 let _lastError = null;
+let _storageStatus = null;
+
+function isStoragePressure(error) {
+  const code = String(error?.code || '');
+  return code === 'OSIS_STORAGE_CAPACITY' ||
+    error?.code === 'OSIS_ARCHIVE_BUSY' ||
+    code === 'ENOSPC' ||
+    code === 'EDQUOT' ||
+    code.startsWith('08') ||
+    ['ECONNREFUSED', 'ECONNRESET', 'ETIMEDOUT', '57P01', '57P02', '57P03'].includes(code);
+}
+
+async function checkStorageAdmission() {
+  _storageStatus = await incidentService.storageStatus({
+    checkDatabase: process.env.OSIS_PERSIST_POSTGRES === 'true',
+  });
+  return _storageStatus;
+}
+
+async function requeueForStorage(scene, error) {
+  const reason = String(error.storageReason || error.code || 'storage_capacity')
+    .replace(/[^A-Za-z0-9_-]/g, '_')
+    .slice(0, 80);
+  const message = `[storage_capacity:${reason}] Processing paused; durable scene remains queued.`;
+  await pool.query(
+    `UPDATE processed_scenes
+        SET status = 'queued', processing_at = NULL, worker_id = NULL,
+            error_message = $1
+      WHERE id = $2`,
+    [message, scene.id]
+  );
+  _storageStatus = {
+    ...(_storageStatus || {}),
+    accepting: false,
+    status: 'paused',
+    reason,
+  };
+  _lastError = message;
+  return { claimed: true, sceneId: scene.scene_id, status: 'queued_storage', reason };
+}
 
 // ---------------------------------------------------------------------------
 // Database helpers
@@ -252,9 +308,9 @@ async function markFailed(id, message) {
  * @param {string} sceneId - CDSE STAC scene ID
  * @returns {Promise<string>} absolute path to the scene directory
  */
-async function ensureSceneDir(sceneId) {
+async function ensureSceneDir(sceneId, suffix = '') {
   // Sanitise: keep only alphanumeric, dash, underscore, dot — prevent traversal
-  const safe = String(sceneId).replace(/[^A-Za-z0-9._-]/g, '_').slice(0, 200);
+  const safe = String(sceneId + suffix).replace(/[^A-Za-z0-9._-]/g, '_').slice(0, 200);
   if (!safe) throw new Error('Invalid scene_id: cannot construct safe directory name');
 
   const sceneDir = path.join(SCENES_DIR, safe);
@@ -315,24 +371,53 @@ async function acquireScene(scene) {
     return aoiMinLon >= sceneMinLon - eps && aoiMaxLon <= sceneMaxLon + eps &&
       aoiMinLat >= sceneMinLat - eps && aoiMaxLat <= sceneMaxLat + eps;
   };
+  const intersects = (b1, b2) => {
+    return !(b1[2] < b2[0] || b1[0] > b2[2] || b1[3] < b2[1] || b1[1] > b2[3]);
+  };
 
   if (replayBbox && (!isSubsetBbox(replayBbox) || !isWithinScene(replayBbox))) {
     throw new Error(`Scene ${scene_id}: Stored replay acquisition bbox is invalid or outside the STAC scene footprint`);
   }
 
-  if (!replayBbox && !isSubsetBbox(acquisitionBbox)) {
-    acquisitionBbox = (poller.PRIORITY_AREAS || [])
-      .map((area) => area.bbox)
-      .find((bbox) => isSubsetBbox(bbox) && isWithinScene(bbox));
-    if (!acquisitionBbox) {
-      throw new Error(`Scene ${scene_id}: no configured <=0.2 degree acquisition bbox is within the STAC scene footprint`);
-    }
-  }
-
-  // --- Verify AOI containment ---
-  // Verify that the selected acquisitionBbox is actually within the fullSceneBbox
-  if (!isSubsetBbox(acquisitionBbox) || !isWithinScene(acquisitionBbox)) {
-    throw new Error(`Scene ${scene_id}: Acquisition bbox [${acquisitionBbox.join(',')}] is invalid or outside the scene footprint [${fullSceneBbox}]`);
+  let targetTiles = [];
+  
+  if (replayBbox && isSubsetBbox(replayBbox) && isWithinScene(replayBbox)) {
+      targetTiles = [replayBbox];
+  } else if (acquisitionBbox && isSubsetBbox(acquisitionBbox)) {
+      targetTiles = [acquisitionBbox];
+  } else {
+      if (process.env.OSIS_GLOBAL_DISCOVERY_MODE === 'true') {
+         const [minLon, minLat, maxLon, maxLat] = fullSceneBbox;
+         const startLatIdx = Math.max(0, Math.floor((minLat + 90) / 0.2));
+         const endLatIdx = Math.min(899, Math.floor((maxLat + 90) / 0.2));
+         const startLonIdx = Math.max(0, Math.floor((minLon + 180) / 0.2));
+         const endLonIdx = Math.min(1799, Math.floor((maxLon + 180) / 0.2));
+         
+         for (let latIdx = startLatIdx; latIdx <= endLatIdx; latIdx++) {
+            for (let lonIdx = startLonIdx; lonIdx <= endLonIdx; lonIdx++) {
+               const tMinLon = -180 + lonIdx * 0.2;
+               const tMinLat = -90 + latIdx * 0.2;
+               const bbox = [
+                     Number(tMinLon.toFixed(3)),
+                     Number(tMinLat.toFixed(3)),
+                     Number((tMinLon + 0.2).toFixed(3)),
+                     Number((tMinLat + 0.2).toFixed(3))
+               ];
+               if (isWithinScene(bbox) || intersects(bbox, fullSceneBbox)) {
+                   targetTiles.push(bbox);
+               }
+            }
+         }
+      } else {
+         targetTiles = (poller.PRIORITY_AREAS || [])
+              .map((area) => area.bbox)
+              .filter((bbox) => isSubsetBbox(bbox) && isWithinScene(bbox));
+      }
+      
+      if (targetTiles.length === 0) {
+          if (isSubsetBbox(fullSceneBbox)) targetTiles.push(fullSceneBbox);
+          else throw new Error(`Scene ${scene_id}: no required tiles overlap the STAC scene footprint`);
+      }
   }
 
   // --- Resolve acquisition timestamp ---
@@ -342,57 +427,68 @@ async function acquireScene(scene) {
   const fromTime = new Date(acquired_at).toISOString();
   const toTime = new Date(new Date(acquired_at).getTime() + 30000).toISOString(); // 30-second window (same as onDemand)
 
-  // --- Ensure output directory ---
-  const sceneDir = await ensureSceneDir(scene_id);
+  const artifacts = [];
 
-  // --- Download VV then VH sequentially (bounded-fetch allows max 2 concurrent; be conservative) ---
-  const paths = {};
-  const tiffMeta = {};
+  for (let i = 0; i < targetTiles.length; i++) {
+    const tileBbox = targetTiles[i];
+    const suffix = targetTiles.length > 1 ? `_tile${i}` : '';
+    const sceneDir = await ensureSceneDir(scene_id, suffix);
+    
+    // Update processing_at to keep worker alive during long multi-tile downloads
+    await pool.query(`UPDATE processed_scenes SET processing_at = NOW() WHERE id = $1`, [scene.id]);
 
-  for (const pol of ['VV', 'VH']) {
-    const destPath = path.join(sceneDir, `${pol.toLowerCase()}.tif`);
+    const paths = {};
+    const tiffMeta = {};
 
-    // Skip if already downloaded (idempotent for partial retries)
-    let alreadyExists = false;
-    try {
-      await fs.access(destPath);
-      alreadyExists = true;
-    } catch (_) { }
+    for (const pol of ['VV', 'VH']) {
+      const destPath = path.join(sceneDir, `${pol.toLowerCase()}.tif`);
 
-    let buffer;
-    if (alreadyExists) {
-      // Re-read to get file size for metadata
-      const stat = await fs.stat(destPath);
-      tiffMeta[pol] = { sizeBytes: stat.size, fromCache: true };
-    } else {
-      const result = await sentinel.getSentinel1GrdImage({
-        bbox: acquisitionBbox,
-        from: fromTime,
-        to: toTime,
-        width: 512,
-        height: 512,
-        polarization: pol,
-      });
-      buffer = result.buffer;
-      await fs.writeFile(destPath, buffer, { flag: 'w' });
-      tiffMeta[pol] = { sizeBytes: buffer.length, fromCache: false };
+      let alreadyExists = false;
+      try {
+        await fs.access(destPath);
+        alreadyExists = true;
+      } catch (_) { }
+
+      let buffer;
+      if (alreadyExists) {
+        const stat = await fs.stat(destPath);
+        tiffMeta[pol] = { sizeBytes: stat.size, fromCache: true };
+      } else {
+        const result = await sentinel.getSentinel1GrdImage({
+          bbox: tileBbox,
+          from: fromTime,
+          to: toTime,
+          width: 512,
+          height: 512,
+          polarization: pol,
+        });
+        buffer = result.buffer;
+        const temporaryPath = `${destPath}.${process.pid}.${randomUUID()}.part`;
+        try {
+          await fs.writeFile(temporaryPath, buffer, { flag: 'wx' });
+          await fs.rename(temporaryPath, destPath);
+        } finally {
+          await fs.rm(temporaryPath, { force: true });
+        }
+        tiffMeta[pol] = { sizeBytes: buffer.length, fromCache: false };
+      }
+      paths[pol.toLowerCase()] = destPath;
     }
 
-    paths[pol.toLowerCase()] = destPath;
+    artifacts.push({
+      sceneDir,
+      paths,
+      tiffMeta,
+      bbox: fullSceneBbox, 
+      acquisitionBbox: tileBbox, 
+      acquiredAt: fromTime,
+      downloadedAt: new Date().toISOString(),
+      workerId: WORKER_ID,
+      polarizations: ['VV', 'VH'],
+    });
   }
 
-  // --- Build artifact metadata ---
-  return {
-    sceneDir,
-    paths,
-    tiffMeta,
-    bbox: fullSceneBbox, // Full CDSE scene footprint
-    acquisitionBbox, // Sub-setting AOI used for raster download
-    acquiredAt: fromTime,
-    downloadedAt: new Date().toISOString(),
-    workerId: WORKER_ID,
-    polarizations: ['VV', 'VH'],
-  };
+  return artifacts;
 }
 
 // ---------------------------------------------------------------------------
@@ -408,6 +504,10 @@ async function processNextScene() {
   if (_inFlight) return { claimed: false, status: 'busy' };
   _inFlight = true;
   try {
+    const storage = await checkStorageAdmission();
+    if (!storage.accepting) {
+      return { claimed: false, status: 'paused_storage', reason: storage.reason, storage };
+    }
     const scene = await claimNextScene();
     if (!scene) {
       return { claimed: false, status: 'empty_queue' };
@@ -425,6 +525,10 @@ async function processSceneById(id) {
   if (_inFlight) return { claimed: false, status: 'busy' };
   _inFlight = true;
   try {
+    const storage = await checkStorageAdmission();
+    if (!storage.accepting) {
+      return { claimed: false, status: 'paused_storage', reason: storage.reason, storage };
+    }
     const scene = await claimSceneById(id);
     if (!scene) return { claimed: false, status: 'not_queued' };
     return await processClaimedScene(scene);
@@ -436,87 +540,145 @@ async function processSceneById(id) {
 }
 
 async function processClaimedScene(scene) {
-  const safeId = String(scene.scene_id).replace(/[^A-Za-z0-9._-]/g, '_').slice(0, 200);
-  const sceneDir = path.join(SCENES_DIR, safeId);
   try {
     console.log(`[worker] Claimed scene: ${scene.scene_id} (id=${scene.id})`);
     _lastActivity = new Date();
 
-    const artifact = await acquireScene(scene);
-    await markCompleted(scene.id, artifact);
+    const artifacts = await acquireScene(scene);
+    const metadataToStore = { tiles: artifacts, incident_ids: [] };
+    await pool.query(
+      'UPDATE processed_scenes SET artifact_metadata = $1::jsonb WHERE id = $2',
+      [JSON.stringify(metadataToStore), scene.id]
+    );
+    let detectionFailed = false;
+    
+    for (const artifact of artifacts) {
+        // Keep worker alive during potentially long pipeline executions
+        await pool.query(`UPDATE processed_scenes SET processing_at = NOW() WHERE id = $1`, [scene.id]);
 
-    try {
-        const trusted = {
-        _scene: {
-          id: scene.scene_id,
-          mode: 'REAL',
-          source: 'cdse_sentinel1',
-          acquiredAt: artifact.acquiredAt,
-          bbox: artifact.acquisitionBbox || artifact.bbox,
-          stacBbox: artifact.bbox,
-          polarization: artifact.polarizations,
-          rasterUnits: 'linear'
-        },
-        _paths: artifact.paths
-      };
+        try {
+            const trusted = {
+            _scene: {
+              id: scene.scene_id,
+              mode: 'REAL',
+              source: 'cdse_sentinel1',
+              acquiredAt: artifact.acquiredAt,
+              bbox: artifact.acquisitionBbox || artifact.bbox,
+              stacBbox: artifact.bbox,
+              polarization: artifact.polarizations,
+              rasterUnits: 'linear'
+            },
+            _paths: artifact.paths,
+            _processedSceneId: scene.id
+          };
 
-      // Apply environment override if configured for this scene
-      const SCENE_ENVIRONMENT_OVERRIDES = {
-        'S1D_IW_GRDH_1SDV_20261005T011017_20261005T011042_004873_0092A1_0488_COG.SAFE': {
-          current: 'environment/arabian_sea/cmems_arabian_sea_20261005.nc'
-        },
-        'S1D_IW_GRDH_1SDV_20260702T142203_20260702T142232_003496_0062F7_DBD7_COG.SAFE': {
-          current: 'environment/oman/cmems_oman_20260702.nc',
-          wind: 'environment/oman/era5_oman_20260702.nc'
+          // Apply environment override if configured for this scene
+          const SCENE_ENVIRONMENT_OVERRIDES = {
+            'S1D_IW_GRDH_1SDV_20261005T011017_20261005T011042_004873_0092A1_0488_COG.SAFE': {
+              current: 'environment/arabian_sea/cmems_arabian_sea_20261005.nc'
+            },
+            'S1D_IW_GRDH_1SDV_20260702T142203_20260702T142232_003496_0062F7_DBD7_COG.SAFE': {
+              current: 'environment/oman/cmems_oman_20260702.nc',
+              wind: 'environment/oman/era5_oman_20260702.nc'
+            }
+          };
+          const envOverride = SCENE_ENVIRONMENT_OVERRIDES[scene.scene_id];
+          if (envOverride) {
+            trusted._scene.environment = envOverride;
+          }
+
+          const report = await incidentService.analyze(
+            {
+              mode: 'REAL',
+              sceneId: scene.scene_id,
+              detector: 'hybrid',
+              forecastHours: 24,
+              hindcastHours: 6
+            },
+            trusted
+          );
+
+          if (report && report.id) {
+            metadataToStore.incident_ids.push(report.id);
+            console.log(`[worker] Detection completed for scene ${scene.scene_id} tile [${artifact.acquisitionBbox}] -> incident ${report.id}`);
+          }
+        } catch (detectionErr) {
+          if (isStoragePressure(detectionErr)) throw detectionErr;
+          const safeMsg = String(detectionErr.message || 'Unknown detection error').slice(0, 1000);
+          detectionFailed = true;
+          console.error(`[worker] Detection failed for scene ${scene.scene_id} tile [${artifact.acquisitionBbox}]:`, safeMsg);
+          try {
+            await pool.query(
+              `UPDATE processed_scenes SET error_message = $1 WHERE id = $2`,
+              [`[detection_failed] ${safeMsg}`, scene.id]
+            );
+          } catch (dbErr) {
+            console.error('[worker] Could not persist detection error to DB:', String(dbErr.message).slice(0, 200));
+          }
         }
-      };
-      const envOverride = SCENE_ENVIRONMENT_OVERRIDES[scene.scene_id];
-      if (envOverride) {
-        trusted._scene.environment = envOverride;
-      }
+    }
+    
+    if (metadataToStore.incident_ids.length > 0) {
+        await pool.query(
+          `UPDATE processed_scenes 
+           SET incident_id = $1,
+               artifact_metadata = $2::jsonb
+           WHERE id = $3`,
+          [metadataToStore.incident_ids[metadataToStore.incident_ids.length - 1], JSON.stringify(metadataToStore), scene.id]
+        );
+    }
 
-      const report = await incidentService.analyze(
-        {
-          mode: 'REAL',
-          sceneId: scene.scene_id,
-          detector: 'hybrid',
-          forecastHours: 24,
-          hindcastHours: 6
-        },
-        trusted
+    if (detectionFailed) {
+      await pool.query(
+        'UPDATE processed_scenes SET artifact_metadata = $1::jsonb WHERE id = $2',
+        [JSON.stringify(metadataToStore), scene.id]
       );
+      await markFailed(
+        scene.id,
+        '[detector_failed] One or more scene tiles failed detection; local rasters retained for diagnosis.'
+      );
+      _failedCount++;
+      return { claimed: true, sceneId: scene.scene_id, status: 'failed_detector' };
+    }
 
-      if (report && report.id) {
-        await pool.query(
-          `UPDATE processed_scenes SET incident_id = $1 WHERE id = $2`,
-          [report.id, scene.id]
-        );
-        console.log(`[worker] Detection completed for scene ${scene.scene_id} -> incident ${report.id}`);
-      }
-    } catch (detectionErr) {
-      const safeMsg = String(detectionErr.message || 'Unknown detection error').slice(0, 1000);
-      console.error(`[worker] Detection failed for scene ${scene.scene_id}:`, safeMsg);
-      // Acquisition succeeded, so scene remains 'completed' and is not retried.
-      // The incident_id remains NULL so it can be retried manually if needed.
-      // Persist the detection error with [detection_failed] prefix.
+    await markCompleted(scene.id, metadataToStore);
+    for (const artifact of artifacts) {
       try {
-        await pool.query(
-          `UPDATE processed_scenes
-              SET error_message = $1
-            WHERE id = $2`,
-          [`[detection_failed] ${safeMsg}`, scene.id]
+        await retention.updateArtifactState(artifact.sceneDir, {
+          state: 'completed',
+          persistenceSucceeded: true,
+          evidenceRequired: true,
+          evidenceArchived: false,
+        });
+      } catch (markerError) {
+        console.warn(
+          '[worker] Artifact retention marker could not be updated; evidence remains protected.',
+          String(markerError.code || markerError.name || 'error'),
         );
-      } catch (dbErr) {
-        console.error('[worker] Could not persist detection error to DB:', String(dbErr.message).slice(0, 200));
       }
     }
 
     _processedCount++;
     _lastError = null;
-    console.log(`[worker] Completed scene: ${scene.scene_id}`);
+    console.log(`[worker] Completed scene: ${scene.scene_id} (tiles processed: ${artifacts.length})`);
     return { claimed: true, sceneId: scene.scene_id, status: 'completed' };
 
   } catch (err) {
+    if (isStoragePressure(err)) {
+      _storageStatus = {
+        ...(_storageStatus || {}),
+        accepting: false,
+        status: 'paused',
+        reason: err.storageReason || err.code,
+      };
+      try {
+        return await requeueForStorage(scene, err);
+      } catch (dbErr) {
+        _lastError = 'Storage pressure detected but queue recovery could not be persisted.';
+        console.error('[worker] Could not persist storage backpressure:', String(dbErr.code || 'database error'));
+        return { claimed: true, sceneId: scene.scene_id, status: 'storage_recovery_failed' };
+      }
+    }
     // Never log raw error objects that could contain tokens
     const safeMsg = String(err.message || 'Unknown error');
     _lastError = safeMsg;
@@ -529,8 +691,6 @@ async function processClaimedScene(scene) {
       console.error('[worker] Could not write failure to DB:', String(dbErr.message).slice(0, 200));
     }
     return { claimed: true, sceneId: scene.scene_id, status: 'failed', error: safeMsg };
-  } finally {
-    // Active retention lifecycle replaces immediate cleanup
   }
 }
 
@@ -602,15 +762,6 @@ async function _tick() {
       console.warn('[worker] Periodic stale recovery failed (non-fatal):', String(recErr.message).slice(0, 200));
     }
 
-    try {
-      const cleaned = await retention.cleanupStaleArtifacts(SCENES_DIR, '');
-      if (cleaned.deleted > 0) {
-        console.log(`[worker] Periodic cleanup removed ${cleaned.deleted} stale artifacts`);
-      }
-    } catch (cleanupErr) {
-      console.warn('[worker] Periodic cleanup failed (non-fatal):', String(cleanupErr.message).slice(0, 200));
-    }
-
     await processNextScene();
   } catch (err) {
     _lastError = String(err.message || 'tick error');
@@ -630,6 +781,7 @@ function workerStatus() {
     failedCount: _failedCount,
     lastActivity: _lastActivity,
     lastError: _lastError,
+    storage: _storageStatus,
     config: {
       intervalMs: WORKER_INTERVAL_MS,
       staleMs: STALE_MS,
@@ -650,5 +802,7 @@ module.exports = {
   markCompleted,
   markFailed,
   recoverStaleScenes,
+  requeueForStorage,
+  checkStorageAdmission,
   _getWorkerId: () => WORKER_ID,
 };

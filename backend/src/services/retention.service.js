@@ -1,15 +1,45 @@
 const fs = require('fs/promises');
 const path = require('path');
 
-const RETENTION_HOURS = Number(process.env.OSIS_ARTIFACT_RETENTION_HOURS);
 const DEFAULT_HOURS = 72;
-const hours = Number.isFinite(RETENTION_HOURS) && RETENTION_HOURS > 0 ? RETENTION_HOURS : DEFAULT_HOURS;
-const RETENTION_MS = hours * 3600000;
+function retentionHours() {
+    const value = Number(process.env.OSIS_ARTIFACT_RETENTION_HOURS);
+    return Number.isFinite(value) && value >= 1 ? value : DEFAULT_HOURS;
+}
+const RETENTION_MS = retentionHours() * 3600000;
 
 const activeDirectories = new Set();
 const registeredSweeps = new Map();
 let sweepTimer = null;
 let isSweeping = false;
+
+function createMarker(directory, owner, values = {}) {
+    const diagnosticHours = Number(values.retentionHours);
+    const lifetime = Number.isFinite(diagnosticHours) && diagnosticHours >= 1
+        ? diagnosticHours * 3600000
+        : RETENTION_MS;
+    return {
+        owner,
+        state: values.state || 'pending',
+        createdAt: values.createdAt || new Date().toISOString(),
+        expires: Date.now() + lifetime,
+        persistenceSucceeded: values.persistenceSucceeded === true,
+        evidenceRequired: values.evidenceRequired !== false,
+        evidenceArchived: values.evidenceArchived === true,
+        directory: path.resolve(directory),
+    };
+}
+
+async function writeMarker(directory, marker) {
+    const target = path.join(directory, 'osis-cache.json');
+    const temporary = `${target}.${process.pid}.${Date.now()}.tmp`;
+    try {
+        await fs.writeFile(temporary, JSON.stringify(marker), { flag: 'wx' });
+        await fs.rename(temporary, target);
+    } finally {
+        await fs.rm(temporary, { force: true });
+    }
+}
 
 function registerActiveDirectory(directory) {
     activeDirectories.add(path.resolve(directory));
@@ -38,6 +68,7 @@ function scheduleCleanup(parentDir, filterPrefix) {
                 isSweeping = false;
             }
         }, 3600000);
+        if (sweepTimer.unref) sweepTimer.unref();
     }
 }
 
@@ -54,12 +85,41 @@ function stopCleanupSchedule() {
  * @param {string} directory - Absolute path to the directory.
  * @param {string} owner - Ownership string (e.g. 'osis-cdse-v1').
  */
-async function markForRetention(directory, owner) {
-    const expires = Date.now() + RETENTION_MS;
-    await fs.writeFile(
-        path.join(directory, 'osis-cache.json'),
-        JSON.stringify({ owner, expires })
-    );
+async function markForRetention(directory, owner, values = {}) {
+    await writeMarker(directory, createMarker(directory, owner, values));
+}
+
+async function updateArtifactState(directory, values = {}) {
+    const markerPath = path.join(directory, 'osis-cache.json');
+    let marker;
+    try {
+        marker = JSON.parse(await fs.readFile(markerPath, 'utf8'));
+    } catch (error) {
+        if (error.code === 'ENOENT') {
+            throw new Error('Cannot update retention state without an ownership marker');
+        }
+        throw error;
+    }
+    if (!marker || typeof marker.owner !== 'string' ||
+        path.resolve(marker.directory || directory) !== path.resolve(directory)) {
+        throw new Error('Retention ownership marker is invalid');
+    }
+    const diagnosticHours = Number(values.retentionHours);
+    const next = {
+        ...marker,
+        ...values,
+        state: values.state || marker.state,
+        expires: Number.isFinite(diagnosticHours) && diagnosticHours >= 1
+            ? Date.now() + diagnosticHours * 3600000
+            : marker.expires,
+        persistenceSucceeded: values.persistenceSucceeded === true ||
+            marker.persistenceSucceeded === true,
+        evidenceArchived: values.evidenceArchived === true ||
+            marker.evidenceArchived === true,
+    };
+    delete next.retentionHours;
+    await writeMarker(directory, next);
+    return next;
 }
 
 /**
@@ -69,11 +129,11 @@ async function markForRetention(directory, owner) {
  * @param {string} parentDir - Absolute path to parent directory (e.g., os.tmpdir() or SCENES_DIR)
  * @param {string} filterPrefix - Prefix for subdirectories to check (e.g., 'osis-')
  * @param {object} options - { dryRun: boolean }
- * @returns {Promise<{ scanned: number, deleted: number, errors: number, logs: string[] }>}
+ * @returns {Promise<{ scanned: number, deleted: number, wouldDelete: number, skipped: number, errors: number, logs: string[] }>}
  */
 async function cleanupStaleArtifacts(parentDir, filterPrefix, options = {}) {
     const { dryRun = false } = options;
-    const result = { scanned: 0, deleted: 0, errors: 0, logs: [] };
+    const result = { scanned: 0, deleted: 0, wouldDelete: 0, skipped: 0, errors: 0, logs: [] };
 
     let entries;
     try {
@@ -95,11 +155,13 @@ async function cleanupStaleArtifacts(parentDir, filterPrefix, options = {}) {
         // Guard against path traversal logic just in case
         const resolved = path.resolve(dirPath);
         if (!resolved.startsWith(path.resolve(parentDir) + path.sep)) {
+            result.skipped++;
             continue;
         }
 
         // Active directories are strictly protected from deletion
         if (activeDirectories.has(resolved)) {
+            result.skipped++;
             continue;
         }
 
@@ -108,27 +170,34 @@ async function cleanupStaleArtifacts(parentDir, filterPrefix, options = {}) {
             const markerData = await fs.readFile(markerPath, 'utf8');
             const marker = JSON.parse(markerData);
             
-            // Only clean directories with valid, expired markers
-            if (marker && marker.owner && typeof marker.expires === 'number') {
-                if (Date.now() > marker.expires) {
-                    if (dryRun) {
-                        result.logs.push(`[retention] Would delete stale directory: ${dirPath}`);
-                        result.deleted++;
-                    } else {
-                        try {
-                            await fs.rm(dirPath, { recursive: true, force: true });
-                            result.logs.push(`[retention] Deleted stale directory: ${dirPath}`);
-                            result.deleted++;
-                        } catch (rmErr) {
-                            result.errors++;
-                            result.logs.push(`[retention] Failed to delete ${dirPath}: ${rmErr.message}`);
-                        }
-                    }
-                }
+            const safeToDelete = marker &&
+                marker.directory === resolved &&
+                typeof marker.owner === 'string' &&
+                marker.owner.startsWith('osis-') &&
+                typeof marker.expires === 'number' &&
+                marker.expires < Date.now() &&
+                ['completed', 'failed'].includes(marker.state) &&
+                (marker.evidenceRequired === false || marker.evidenceArchived === true) &&
+                (marker.state === 'failed' || marker.persistenceSucceeded === true);
+            if (!safeToDelete) {
+                result.skipped++;
+                continue;
             }
+            if (dryRun) {
+                result.logs.push(`[retention] Would delete verified stale directory: ${dirPath}`);
+                result.wouldDelete++;
+                continue;
+            }
+            await fs.rm(dirPath, { recursive: true, force: false });
+            result.logs.push(`[retention] Deleted verified stale directory: ${dirPath}`);
+            result.deleted++;
         } catch (err) {
-            // Missing marker, unparseable JSON, or read error -> safe to ignore
-            // We never purge a directory if we can't confirm it's ours and expired.
+            if (err.code === 'ENOENT') {
+                result.skipped++;
+                continue;
+            }
+            result.errors++;
+            result.logs.push(`[retention] Could not verify or remove ${dirPath}: ${err.code || 'error'}`);
         }
     }
 
@@ -142,5 +211,6 @@ module.exports = {
     scheduleCleanup,
     stopCleanupSchedule,
     markForRetention,
+    updateArtifactState,
     cleanupStaleArtifacts
 };
